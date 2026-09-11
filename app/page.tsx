@@ -1,0 +1,3 @@
+'use client'
+import {useState} from 'react';import {useRouter} from 'next/navigation'
+export default function Home(){const [tracking,setTracking]=useState('');const router=useRouter();return <main className="home"><div className="eyebrow">SHIPMENT TRACKING</div><h1>Track your package</h1><p>Enter your tracking number to see the latest shipment status and delivery updates.</p><form onSubmit={e=>{e.preventDefault();if(tracking.trim())router.push(`/track/${tracking.trim().toUpperCase()}`)}}><input value={tracking} onChange={e=>setTracking(e.target.value)} placeholder="e.g. PKG-ABC123456789"/><button className="btn btn-primary">Track package</button></form><a className="admin-link" href="/admin">Admin console</a></main>}
