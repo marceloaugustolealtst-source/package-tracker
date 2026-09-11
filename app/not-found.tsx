@@ -1,0 +1,1 @@
+export default function NotFound(){return <main className="home"><div className="eyebrow">PACKAGE TRACKING</div><h1>Tracking number not found</h1><p>Check the tracking number and try again.</p><a className="btn btn-primary" href="/">Track another package</a></main>}
