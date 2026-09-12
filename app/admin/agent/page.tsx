@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import './agent.module.css'
 import {createClient} from '@/lib/supabase-server'
 import {updateAgentSettings,sendAgentMessage,setConversationAutomation,closeConversation} from '../actions/agent'
 
