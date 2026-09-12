@@ -12,6 +12,6 @@ drop function if exists public.track_shipment(text);create or replace function p
 create or replace function public.track_events(p_tracking_number text) returns table(id uuid,shipment_id uuid,status text,location text,description text,event_time timestamptz) language sql security definer set search_path=public as $$ select e.id,e.shipment_id,e.status,e.location,e.description,e.event_time from public.tracking_events e join public.shipments s on s.id=e.shipment_id where upper(s.tracking_number)=upper(p_tracking_number) order by e.event_time desc $$;
 revoke all on function public.track_shipment(text) from public;grant execute on function public.track_shipment(text) to anon,authenticated;
 revoke all on function public.track_events(text) from public;grant execute on function public.track_events(text) to anon,authenticated;
-create or replace function public.set_updated_at() returns trigger language plpgsql as $$ begin new.updated_at=now();return new;end; $$;
+create or replace function public.set_updated_at() returns trigger language plpgsql set search_path=public as $$ begin new.updated_at=now();return new;end; $$;
 drop trigger if exists shipments_updated_at on public.shipments;create trigger shipments_updated_at before update on public.shipments for each row execute function public.set_updated_at();
 -- Create an Auth user in Supabase, then mark only that user as admin: update auth.users set raw_app_meta_data=coalesce(raw_app_meta_data,'{}'::jsonb)||'{"role":"admin"}'::jsonb where email='YOUR_ADMIN_EMAIL';
