@@ -1,0 +1,12 @@
+/* Real photography treatment for UPC landing-page visuals. Uses Unsplash-hosted photographs; no stickers or generated artwork. */
+.hero-image .courier-scene{background-image:linear-gradient(90deg,rgba(53,28,21,.12),rgba(53,28,21,.08)),url('https://images.unsplash.com/photo-1616401784845-180882ba9ba8?auto=format&fit=crop&w=1200&q=85');background-size:cover;background-position:center;color:#fff;box-shadow:18px 18px 0 #7a1f16;transform:none;border-radius:2px;overflow:hidden}
+.hero-image .courier-scene>*:not(.scene-label){display:none}.hero-image .scene-label{left:24px;bottom:20px;color:#fff;background:rgba(53,28,21,.82);padding:9px 12px;border-radius:2px;letter-spacing:.12em}
+.delivery-visuals .agent-portrait{background-size:cover;background-position:center;border-radius:2px;filter:none}
+.delivery-visuals .agent-portrait:before,.delivery-visuals .agent-portrait:after{display:none}
+.delivery-visuals .agent-one{background-image:linear-gradient(180deg,rgba(53,28,21,0) 45%,rgba(53,28,21,.45)),url('https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&w=800&q=85')}
+.delivery-visuals .agent-two{background-image:linear-gradient(180deg,rgba(53,28,21,0) 45%,rgba(53,28,21,.45)),url('https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=800&q=85')}
+.delivery-visuals .agent-three{background-image:linear-gradient(180deg,rgba(53,28,21,0) 45%,rgba(53,28,21,.45)),url('https://images.unsplash.com/photo-1551836022-d5d88e9218df?auto=format&fit=crop&w=800&q=85')}
+.delivery-visuals .agent-portrait span{display:none}
+.delivery-visuals .aircraft-sky{background-image:linear-gradient(180deg,rgba(53,28,21,.04),rgba(53,28,21,.2)),url('https://images.unsplash.com/photo-1436491865332-7a61a109cc05?auto=format&fit=crop&w=1400&q=85');background-size:cover;background-position:center}
+.delivery-visuals .airplane{display:none}
+@media(max-width:760px){.hero-image .courier-scene{box-shadow:8px 8px 0 #7a1f16}.delivery-visuals .agent-portrait{height:180px}}
