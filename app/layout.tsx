@@ -1,4 +1,5 @@
 import './globals.css'
+import './realistic-media.css'
 import './admin/admin.module.css'
 import './admin/receipt.module.css'
 import Script from 'next/script'
