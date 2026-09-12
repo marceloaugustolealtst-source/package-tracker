@@ -3,6 +3,7 @@ import './realistic-media.css'
 import './admin/admin.module.css'
 import './admin/receipt.module.css'
 import '../components/SupportAgent.css'
+import '../components/language-fix.css'
 import Script from 'next/script'
 import SupportAgent from '@/components/SupportAgent'
 
