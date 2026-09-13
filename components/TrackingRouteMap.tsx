@@ -1,11 +1,11 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
-type Event={id:string;location:string|null;status:string;created_at?:string;description?:string;event_time?:string};
+type TrackingEvent={id:string;location:string|null;status:string;created_at?:string;description?:string;event_time?:string};
 type Point={name:string;lat:number;lng:number};
 declare global { interface Window { L?: any } }
 const places:Point[]=[{name:'Toronto',lat:43.6532,lng:-79.3832},{name:'New York',lat:40.7128,lng:-74.006},{name:'London',lat:51.5074,lng:-0.1278},{name:'Paris',lat:48.8566,lng:2.3522},{name:'Warsaw',lat:52.2297,lng:21.0122},{name:'Cairo',lat:30.0444,lng:31.2357},{name:'Dubai',lat:25.2048,lng:55.2708},{name:'Mumbai',lat:19.076,lng:72.8777},{name:'Lagos',lat:6.5244,lng:3.3792},{name:'Nairobi',lat:-1.2921,lng:36.8219},{name:'Johannesburg',lat:-26.2041,lng:28.0473},{name:'São Paulo',lat:-23.5505,lng:-46.6333},{name:'Singapore',lat:1.3521,lng:103.8198},{name:'Tokyo',lat:35.6762,lng:139.6503},{name:'Sydney',lat:-33.8688,lng:151.2093}];
 const findPlace=(v:string)=>places.find(p=>(v||'').toLowerCase().includes(p.name.toLowerCase()))||null;const distance=(a:Point,b:Point)=>Math.hypot((a.lat-b.lat)*1.1,a.lng-b.lng);const statusLabel=(s:string)=>s.replaceAll('_',' ');
-export default function TrackingRouteMap({origin,destination,status,events}:{origin:string;destination:string;status:string;events:Event[]}){
+export default function TrackingRouteMap({origin,destination,status,events}:{origin:string;destination:string;status:string;events:TrackingEvent[]}){
  const mapRef=useRef<HTMLDivElement>(null),mapInstance=useRef<any>(null),timerRef=useRef<any>(null);const [ready,setReady]=useState(false);
  const start=useMemo(()=>findPlace(origin)||places.find(p=>p.name==='Lagos')!,[origin]);const end=useMemo(()=>findPlace(destination)||places.find(p=>p.name==='Warsaw')!,[destination]);
  const route=useMemo(()=>{const cs=places.filter(p=>p.name!==start.name&&p.name!==end.name).filter(p=>distance(start,p)+distance(p,end)<=distance(start,end)*1.45).sort((a,b)=>distance(start,a)-distance(start,b));const n=Math.min(3,cs.length),r=[start];for(let i=0;i<n;i++){const p=cs[Math.floor((i+1)*cs.length/(n+1))];if(p)r.push(p)}r.push(end);return r},[start,end]);
