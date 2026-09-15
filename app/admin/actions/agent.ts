@@ -25,7 +25,6 @@ export async function sendAgentMessage(formData:FormData){
   const conversationId=String(formData.get('conversation_id')||'')
   const body=String(formData.get('body')||'').trim()
   if(!conversationId||!body) return
-  // The temporary automated "Checking…" message is removed as soon as a human agent takes over.
   await supabase.from('support_messages').delete().eq('conversation_id',conversationId).eq('sender','bot').ilike('body','Checking your tracking number%')
   const {error}=await supabase.from('support_messages').insert({conversation_id:conversationId,sender:'agent',body})
   if(error) throw new Error(error.message)
@@ -47,7 +46,9 @@ export async function closeConversation(formData:FormData){
   const {supabase}=await admin()
   const conversationId=String(formData.get('conversation_id')||'')
   if(!conversationId) return
-  const {error}=await supabase.from('support_conversations').update({status:'closed',automation_paused:true,automation_stage:'agent_takeover',updated_at:new Date().toISOString()}).eq('id',conversationId)
+  const {error:messageError}=await supabase.from('support_messages').delete().eq('conversation_id',conversationId)
+  if(messageError) throw new Error(messageError.message)
+  const {error}=await supabase.from('support_conversations').update({status:'closed',automation_paused:true,automation_stage:'closed',updated_at:new Date().toISOString()}).eq('id',conversationId)
   if(error) throw new Error(error.message)
   revalidatePath('/admin/agent')
 }
