@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import './agent.module.css'
 import {createClient} from '@/lib/supabase-server'
+import {createAdminClient} from '@/lib/supabase-admin'
 import {updateAgentSettings,sendAgentMessage,setConversationAutomation,closeConversation} from '../actions/agent'
 import AgentInbox from './AgentInbox'
 
@@ -8,17 +9,19 @@ export const dynamic='force-dynamic'
 
 export default async function AgentControl(){
   const supabase=await createClient()
-  const {data:settings}=await supabase.from('support_settings').select('*').eq('id',true).maybeSingle()
+  const adminDb=createAdminClient()
+  const settingsDb=adminDb||supabase
+  const {data:settings}=await settingsDb.from('support_settings').select('*').eq('id',true).maybeSingle()
 
-  // Load conversations first, then load messages separately. This makes the
-  // inbox independent of the nested Supabase relationship and ensures both
-  // guest sessions and authenticated/registered customers are visible.
-  const {data:rows}=await supabase.from('support_conversations').select('*').neq('status','closed').order('updated_at',{ascending:false}).limit(100)
+  // Support data is read with the server-only admin/secret client so RLS on the
+  // customer chat tables cannot hide guest or registered conversations from an
+  // authenticated support agent. The secret key never reaches the browser.
+  const {data:rows}=await settingsDb.from('support_conversations').select('*').neq('status','closed').order('updated_at',{ascending:false}).limit(100)
   const conversations=rows||[]
   const ids=conversations.map((c:any)=>c.id).filter(Boolean)
   let messages:any[]=[]
   if(ids.length){
-    const result=await supabase.from('support_messages').select('id,conversation_id,sender,body,created_at').in('conversation_id',ids).order('created_at',{ascending:true}).limit(2000)
+    const result=await settingsDb.from('support_messages').select('id,conversation_id,sender,body,created_at').in('conversation_id',ids).order('created_at',{ascending:true}).limit(2000)
     messages=result.data||[]
   }
   const messageMap=new Map<string,any[]>()
