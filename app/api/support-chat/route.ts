@@ -8,6 +8,12 @@ function adminClient(){
   return createClient(url,key,{auth:{autoRefreshToken:false,persistSession:false}})
 }
 
+async function automationEnabled(supabase:any){
+  const result=await supabase.from('support_settings').select('automated_replies_enabled').eq('id',true).maybeSingle()
+  if(result.error) throw result.error
+  return result.data?.automated_replies_enabled ?? true
+}
+
 async function getOrCreateConversation(supabase:any,sessionId:string){
   if(!sessionId) throw new Error('Missing session id')
   const found=await supabase.from('support_conversations').select('*').eq('session_id',sessionId).maybeSingle()
@@ -59,7 +65,7 @@ export async function POST(req:Request){
       }
       const messages=await supabase.from('support_messages').select('id,sender,body,created_at').eq('conversation_id',conversation.id).order('created_at',{ascending:true})
       if(messages.error) throw messages.error
-      return NextResponse.json({conversation,messages:messages.data||[]})
+      return NextResponse.json({conversation,messages:messages.data||[],automated_replies_enabled:await automationEnabled(supabase)})
     }
 
     if(action==='messages'){
@@ -70,7 +76,7 @@ export async function POST(req:Request){
       if(!conversation) return NextResponse.json({error:'Conversation does not belong to this session'},{status:403})
       const messages=await supabase.from('support_messages').select('id,sender,body,created_at').eq('conversation_id',conversationId).order('created_at',{ascending:true})
       if(messages.error) throw messages.error
-      return NextResponse.json({conversation,messages:messages.data||[]})
+      return NextResponse.json({conversation,messages:messages.data||[],automated_replies_enabled:await automationEnabled(supabase)})
     }
 
     if(action==='send'||action==='bot'){
@@ -78,6 +84,8 @@ export async function POST(req:Request){
       const sessionId=String(body?.session_id||'').trim()
       const text=String(body?.body||'').trim()
       if(!text||!sessionId) return NextResponse.json({error:'Missing message body or session id'},{status:400})
+      const enabled=await automationEnabled(supabase)
+      if(action==='bot'&&!enabled) return NextResponse.json({error:'Automated replies are disabled',automated_replies_enabled:false},{status:409})
       let conversation:any=null
       if(conversationId) conversation=await getOwnedConversation(supabase,conversationId,sessionId)
       if(!conversation) conversation=await getOrCreateConversation(supabase,sessionId)
@@ -87,7 +95,7 @@ export async function POST(req:Request){
       if(inserted.error) throw inserted.error
       const updated=await supabase.from('support_conversations').update({status:'open',updated_at:new Date().toISOString()}).eq('id',conversation.id).eq('session_id',sessionId)
       if(updated.error) throw updated.error
-      return NextResponse.json({conversation_id:conversation.id,message:inserted.data})
+      return NextResponse.json({conversation_id:conversation.id,message:inserted.data,automated_replies_enabled:enabled})
     }
 
     if(action==='close'){
