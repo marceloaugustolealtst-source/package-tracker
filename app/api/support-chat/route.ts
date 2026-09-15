@@ -32,6 +32,16 @@ async function getOwnedConversation(supabase:any,conversationId:string,sessionId
   return result.data
 }
 
+async function permanentlyDeleteConversation(supabase:any,conversationId:string,sessionId:string){
+  const conversation=await getOwnedConversation(supabase,conversationId,sessionId)
+  if(!conversation) return false
+  const messages=await supabase.from('support_messages').delete().eq('conversation_id',conversationId)
+  if(messages.error) throw messages.error
+  const deleted=await supabase.from('support_conversations').delete().eq('id',conversationId).eq('session_id',sessionId)
+  if(deleted.error) throw deleted.error
+  return true
+}
+
 export async function POST(req:Request){
   try{
     const body=await req.json()
@@ -78,6 +88,14 @@ export async function POST(req:Request){
       const updated=await supabase.from('support_conversations').update({status:'open',updated_at:new Date().toISOString()}).eq('id',conversation.id).eq('session_id',sessionId)
       if(updated.error) throw updated.error
       return NextResponse.json({conversation_id:conversation.id,message:inserted.data})
+    }
+
+    if(action==='close'){
+      const conversationId=String(body?.conversation_id||'').trim()
+      const sessionId=String(body?.session_id||'').trim()
+      if(!conversationId||!sessionId) return NextResponse.json({error:'Missing conversation or session id'},{status:400})
+      const deleted=await permanentlyDeleteConversation(supabase,conversationId,sessionId)
+      return NextResponse.json({success:deleted,conversation_id:conversationId,messages_deleted:deleted})
     }
 
     if(action==='update'){
