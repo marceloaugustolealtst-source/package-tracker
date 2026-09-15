@@ -47,6 +47,7 @@ export async function closeConversation(formData:FormData){
   const conversationId=String(formData.get('conversation_id')||'')
   if(!conversationId) return
   const {error}=await supabase.from('support_conversations').update({status:'closed',automation_paused:true,automation_stage:'closed',updated_at:new Date().toISOString()}).eq('id',conversationId)
-  if(error) throw new Error(error.message)
+  if(error) throw new Error(`Unable to close conversation: ${error.message}`)
   revalidatePath('/admin/agent')
+  revalidatePath('/admin/agent', 'layout')
 }
