@@ -12,8 +12,8 @@ export default function SupportAgent(){
  useEffect(()=>{if(open)ensureConversation()},[open])
  useEffect(()=>{if(!conversation?.id)return;const timer=window.setInterval(()=>loadMessages(conversation.id),1500);return()=>window.clearInterval(timer)},[conversation?.id])
  function quick(value:string){setText(value)}
- async function botMessage(body:string){await support({action:'bot',conversation_id:conversation!.id,body});await loadMessages(conversation!.id)}
- async function send(){const value=text.trim();if(!value||!conversation||busy)return;setBusy(true);setError('');setText('');try{await support({action:'send',conversation_id:conversation.id,body:value});await loadMessages(conversation.id);if(conversation.automation_stage==='agent_takeover'||conversation.automation_paused){setBusy(false);return}
+ async function botMessage(body:string){await support({action:'bot',conversation_id:conversation!.id,session_id:conversation!.session_id,body});await loadMessages(conversation!.id)}
+ async function send(){const value=text.trim();if(!value||!conversation||busy)return;setBusy(true);setError('');setText('');try{const sent=await support({action:'send',conversation_id:conversation.id,session_id:conversation.session_id,body:value});await loadMessages(sent.conversation_id||conversation.id);if(conversation.automation_stage==='agent_takeover'||conversation.automation_paused){setBusy(false);return}
  const candidate=value.toUpperCase().match(/[A-Z0-9][A-Z0-9-]{5,}/)?.[0]||''
  if(!candidate){setTyping(true);window.setTimeout(async()=>{try{await botMessage('Please provide your correct UPC tracking number.')}finally{setTyping(false);setBusy(false)}},800);return}
  setTyping(true)
