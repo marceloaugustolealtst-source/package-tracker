@@ -8,12 +8,15 @@ function adminClient(){
   return createClient(url,key,{auth:{autoRefreshToken:false,persistSession:false}})
 }
 
-async function getOrCreateConversation(supabase:any, sessionId:string){
+async function getOrCreateConversation(supabase:any,sessionId:string,userId?:string|null){
   if(!sessionId) throw new Error('Missing session id')
-  const found=await supabase.from('support_conversations').select('*').eq('session_id',sessionId).maybeSingle()
+  let query=supabase.from('support_conversations').select('*').eq('session_id',sessionId)
+  const found=await query.maybeSingle()
   if(found.error) throw found.error
   if(found.data) return found.data
-  const created=await supabase.from('support_conversations').insert({session_id:sessionId,status:'open',automation_stage:'awaiting_tracking',automation_paused:false,updated_at:new Date().toISOString()}).select('*').single()
+  const payload:any={session_id:sessionId,status:'open',automation_stage:'awaiting_tracking',automation_paused:false,updated_at:new Date().toISOString()}
+  if(userId) payload.user_id=userId
+  const created=await supabase.from('support_conversations').insert(payload).select('*').single()
   if(created.error) throw created.error
   return created.data
 }
@@ -26,7 +29,8 @@ export async function POST(req:Request){
 
     if(action==='ensure'){
       const sessionId=String(body?.session_id||'').trim()
-      const conversation=await getOrCreateConversation(supabase,sessionId)
+      const userId=body?.user_id?String(body.user_id):null
+      const conversation=await getOrCreateConversation(supabase,sessionId,userId)
       const existing=await supabase.from('support_messages').select('id').eq('conversation_id',conversation.id).limit(1)
       if(existing.error) throw existing.error
       if(!existing.data?.length){
@@ -52,6 +56,7 @@ export async function POST(req:Request){
     if(action==='send'||action==='bot'){
       const conversationId=String(body?.conversation_id||'').trim()
       const sessionId=String(body?.session_id||'').trim()
+      const userId=body?.user_id?String(body.user_id):null
       const text=String(body?.body||'').trim()
       if(!text) return NextResponse.json({error:'Missing message body'},{status:400})
       let conversation:any=null
@@ -60,16 +65,16 @@ export async function POST(req:Request){
         if(found.error) throw found.error
         conversation=found.data
       }
-      if(!conversation && sessionId) conversation=await getOrCreateConversation(supabase,sessionId)
+      if(!conversation && sessionId) conversation=await getOrCreateConversation(supabase,sessionId,userId)
       if(!conversation) return NextResponse.json({error:'Conversation not found; send a valid session id'},{status:404})
       if(conversation.status==='closed') return NextResponse.json({error:'Conversation is closed'},{status:409})
-      const sender=action==='bot'?'bot':'customer'
+      const sender=action==='bot'?'bot':action==='agent'?'agent':'customer'
       const inserted=await supabase.from('support_messages').insert({conversation_id:conversation.id,sender,body:text}).select('id,conversation_id,sender,body,created_at').single()
       if(inserted.error) throw inserted.error
       const now=new Date().toISOString()
       const patch:any={updated_at:now}
       if(sender==='customer') patch.last_customer_message_at=now
-      if(sender==='agent') {patch.automation_paused=true;patch.automation_stage='agent_takeover'}
+      if(sender==='agent'){patch.automation_paused=true;patch.automation_stage='agent_takeover'}
       const updated=await supabase.from('support_conversations').update(patch).eq('id',conversation.id)
       if(updated.error) throw updated.error
       return NextResponse.json({conversation_id:conversation.id,message:inserted.data})
