@@ -1,19 +1,21 @@
 'use client'
 import {useEffect,useState} from 'react'
+import {createClient} from '@/lib/supabase-browser'
 type Message={id:string;sender:'customer'|'agent'|'bot';body:string;created_at:string}
 type Conversation={id:string;session_id:string;automation_stage:string;automation_paused:boolean;tracking_number?:string|null}
 const SESSION_KEY='upc-support-session'
-function getSession(){let id=localStorage.getItem(SESSION_KEY);if(!id){id=crypto.randomUUID();localStorage.setItem(SESSION_KEY,id)}return id}
+function getSession(userId?:string|null){const key=userId?`${SESSION_KEY}:${userId}`:SESSION_KEY;let id=localStorage.getItem(key);if(!id){id=crypto.randomUUID();localStorage.setItem(key,id)}return id}
 async function support(body:any){const response=await fetch('/api/support-chat',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.error||'Support chat request failed');return data}
+async function getIdentity(){try{const s=createClient();const {data}=await s.auth.getUser();return data.user?.id||null}catch{return null}}
 export default function SupportAgent(){
- const[open,setOpen]=useState(false),[conversation,setConversation]=useState<Conversation|null>(null),[messages,setMessages]=useState<Message[]>([]),[text,setText]=useState(''),[typing,setTyping]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('')
+ const[open,setOpen]=useState(false),[conversation,setConversation]=useState<Conversation|null>(null),[messages,setMessages]=useState<Message[]>([]),[text,setText]=useState(''),[typing,setTyping]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[identity,setIdentity]=useState<string|null>(null)
  async function loadMessages(id:string){try{const data=await support({action:'messages',conversation_id:id});setConversation(data.conversation as Conversation);setMessages((data.messages||[]) as Message[])}catch(error:any){setError(error.message||'Unable to load Agent messages.')}}
- async function ensureConversation(){setError('');try{const data=await support({action:'ensure',session_id:getSession()});setConversation(data.conversation as Conversation);setMessages((data.messages||[]) as Message[])}catch(error:any){setError(error.message||'Unable to connect to Agent. Please try again.')}}
+ async function ensureConversation(){setError('');try{const userId=await getIdentity();setIdentity(userId);const sessionId=getSession(userId);const data=await support({action:'ensure',session_id:sessionId,user_id:userId});setConversation(data.conversation as Conversation);setMessages((data.messages||[]) as Message[])}catch(error:any){setError(error.message||'Unable to connect to Agent. Please try again.')}}
  useEffect(()=>{if(open)ensureConversation()},[open])
  useEffect(()=>{if(!conversation?.id)return;const timer=window.setInterval(()=>loadMessages(conversation.id),1500);return()=>window.clearInterval(timer)},[conversation?.id])
  function quick(value:string){setText(value)}
- async function botMessage(body:string){await support({action:'bot',conversation_id:conversation!.id,session_id:conversation!.session_id,body});await loadMessages(conversation!.id)}
- async function send(){const value=text.trim();if(!value||!conversation||busy)return;setBusy(true);setError('');setText('');try{const sent=await support({action:'send',conversation_id:conversation.id,session_id:conversation.session_id,body:value});await loadMessages(sent.conversation_id||conversation.id);if(conversation.automation_stage==='agent_takeover'||conversation.automation_paused){setBusy(false);return}
+ async function botMessage(body:string){await support({action:'bot',conversation_id:conversation!.id,session_id:conversation!.session_id,user_id:identity,body});await loadMessages(conversation!.id)}
+ async function send(){const value=text.trim();if(!value||!conversation||busy)return;setBusy(true);setError('');setText('');try{const sent=await support({action:'send',conversation_id:conversation.id,session_id:conversation.session_id,user_id:identity,body:value});await loadMessages(sent.conversation_id||conversation.id);if(conversation.automation_stage==='agent_takeover'||conversation.automation_paused){setBusy(false);return}
  const candidate=value.toUpperCase().match(/[A-Z0-9][A-Z0-9-]{5,}/)?.[0]||''
  if(!candidate){setTyping(true);window.setTimeout(async()=>{try{await botMessage('Please provide your correct UPC tracking number.')}finally{setTyping(false);setBusy(false)}},800);return}
  setTyping(true)
