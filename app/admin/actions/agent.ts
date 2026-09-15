@@ -46,9 +46,10 @@ export async function closeConversation(formData:FormData){
   const {supabase}=await admin()
   const conversationId=String(formData.get('conversation_id')||'')
   if(!conversationId) return
-  const {error:messageError}=await supabase.from('support_messages').delete().eq('conversation_id',conversationId)
-  if(messageError) throw new Error(messageError.message)
   const {error}=await supabase.from('support_conversations').update({status:'closed',automation_paused:true,automation_stage:'closed',updated_at:new Date().toISOString()}).eq('id',conversationId)
   if(error) throw new Error(error.message)
+  // Do not delete from Supabase here: RLS can reject an admin-side delete and cause the Next.js error page.
+  // Closed conversations are filtered out of the inbox, so their messages disappear from the chat immediately.
   revalidatePath('/admin/agent')
+  redirect('/admin/agent?closed=1')
 }
