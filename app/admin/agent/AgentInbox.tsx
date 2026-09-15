@@ -5,6 +5,9 @@ import {createClient} from '@/lib/supabase-browser'
 
 type Conversation={id:string;customer_name?:string|null;customer_email?:string|null;session_id?:string|null;automation_paused?:boolean;support_messages:any[]}
 type Action=(formData:FormData)=>void|Promise<void>
+const IMAGE_PREFIX='[[image]]'
+
+function MessageContent({body}:{body:string}){if(body?.startsWith(IMAGE_PREFIX))return <img src={body.slice(IMAGE_PREFIX.length)} alt="Customer attachment" style={{display:'block',maxWidth:'min(100%,420px)',maxHeight:360,borderRadius:10,objectFit:'contain'}}/>;return <div>{body}</div>}
 
 export default function AgentInbox({conversations,sendAgentMessage,setConversationAutomation,closeConversation}:{conversations:Conversation[];sendAgentMessage:Action;setConversationAutomation:Action;closeConversation:Action}){
   const [selectedId,setSelectedId]=useState(conversations[0]?.id||'')
@@ -13,37 +16,8 @@ export default function AgentInbox({conversations,sendAgentMessage,setConversati
   const messages=[...(selected?.support_messages||[])].sort((a:any,b:any)=>+new Date(a.created_at)-+new Date(b.created_at))
 
   useEffect(()=>{setLiveConversations(conversations)},[conversations])
+  useEffect(()=>{const supabase=createClient();let active=true;const reload=async()=>{const {data:rows}=await supabase.from('support_conversations').select('*').neq('status','closed').order('updated_at',{ascending:false}).limit(100);if(!active||!rows)return;const ids=rows.map((c:any)=>c.id).filter(Boolean);let all:any[]=[];if(ids.length){const result=await supabase.from('support_messages').select('id,conversation_id,sender,body,created_at').in('conversation_id',ids).order('created_at',{ascending:true}).limit(2000);all=result.data||[]}const byId=new Map<string,any[]>();all.forEach(m=>{const list=byId.get(m.conversation_id)||[];list.push(m);byId.set(m.conversation_id,list)});if(active)setLiveConversations(rows.map((c:any)=>({...c,support_messages:byId.get(c.id)||[]})))};const channel=supabase.channel('agent-live-inbox').on('postgres_changes',{event:'*',schema:'public',table:'support_messages'},()=>reload()).on('postgres_changes',{event:'*',schema:'public',table:'support_conversations'},()=>reload()).subscribe();return()=>{active=false;supabase.removeChannel(channel)}},[])
+  useEffect(()=>{if(selectedId&&!liveConversations.some(c=>c.id===selectedId))setSelectedId(liveConversations[0]?.id||'');else if(!selectedId&&liveConversations[0]?.id)setSelectedId(liveConversations[0].id)},[liveConversations,selectedId])
 
-  useEffect(()=>{
-    const supabase=createClient()
-    let active=true
-    const reload=async()=>{
-      const {data:rows}=await supabase.from('support_conversations').select('*').neq('status','closed').order('updated_at',{ascending:false}).limit(100)
-      if(!active||!rows)return
-      const ids=rows.map((c:any)=>c.id).filter(Boolean)
-      let all:any[]=[]
-      if(ids.length){const result=await supabase.from('support_messages').select('id,conversation_id,sender,body,created_at').in('conversation_id',ids).order('created_at',{ascending:true}).limit(2000);all=result.data||[]}
-      const byId=new Map<string,any[]>()
-      all.forEach(m=>{const list=byId.get(m.conversation_id)||[];list.push(m);byId.set(m.conversation_id,list)})
-      if(active)setLiveConversations(rows.map((c:any)=>({...c,support_messages:byId.get(c.id)||[]})))
-    }
-    const channel=supabase.channel('agent-live-inbox')
-      .on('postgres_changes',{event:'*',schema:'public',table:'support_messages'},()=>reload())
-      .on('postgres_changes',{event:'*',schema:'public',table:'support_conversations'},()=>reload())
-      .subscribe()
-    return()=>{active=false;supabase.removeChannel(channel)}
-  },[])
-
-  useEffect(()=>{
-    if(selectedId&&!liveConversations.some(c=>c.id===selectedId))setSelectedId(liveConversations[0]?.id||'')
-    else if(!selectedId&&liveConversations[0]?.id)setSelectedId(liveConversations[0].id)
-  },[liveConversations,selectedId])
-
-  return <div className="wa-inbox">
-    <aside className="wa-sidebar">
-      <div className="wa-sidebar-head"><div><span className="muted">LIVE INBOX</span><h2>Messages</h2></div><span className="inbox-count">{liveConversations.length}</span></div>
-      <div className="wa-chat-list">{liveConversations.map(c=>{const ms=[...(c.support_messages||[])].sort((a:any,b:any)=>+new Date(b.created_at)-+new Date(a.created_at));const last=ms[0];return <button type="button" className={'wa-chat-row '+(selected?.id===c.id?'selected':'')} key={c.id} onClick={()=>setSelectedId(c.id)}><span className="wa-avatar">{(c.customer_name||'C').slice(0,1).toUpperCase()}</span><span className="wa-chat-main"><b>{c.customer_name||'Customer'}</b><small>{last?.body||'New customer conversation'}</small></span><span className="wa-chat-time">{last?.created_at?new Date(last.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):''}</span></button>})}</div>
-    </aside>
-    <section className="wa-window">{selected?<><header className="wa-header"><span className="wa-avatar header-avatar">{(selected.customer_name||'C').slice(0,1).toUpperCase()}</span><div><b>{selected.customer_name||'Customer'}</b><small>{selected.customer_email||selected.session_id||'Customer support'}</small></div><span className="wa-online">● Active</span></header><div className="wa-messages">{messages.map((m:any)=><div className={'wa-row '+(m.sender==='agent'?'outgoing':'incoming')} key={m.id}><div className={'wa-bubble '+m.sender}><span className="wa-sender">{m.sender==='agent'?'You':m.sender==='bot'?'UPC Support':'Customer'}</span><div>{m.body}</div><small>{new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</small></div></div>)}{!messages.length&&<div className="wa-empty">No messages yet. New customer messages will appear here automatically.</div>}</div><form action={sendAgentMessage} className="wa-composer"><input type="hidden" name="conversation_id" value={selected.id}/><textarea name="body" placeholder="Type a message" required rows={1}/><button className="wa-send" type="submit">➤</button></form><div className="wa-actions">{selected.automation_paused?<form action={setConversationAutomation}><input type="hidden" name="conversation_id" value={selected.id}/><input type="hidden" name="paused" value="false"/><button type="submit">Resume automation</button></form>:<form action={setConversationAutomation}><input type="hidden" name="conversation_id" value={selected.id}/><input type="hidden" name="paused" value="true"/><button type="submit">Pause automation</button></form>}<form action={closeConversation}><input type="hidden" name="conversation_id" value={selected.id}/><button type="submit">Close chat</button></form></div></>:<div className="wa-empty"><b>Select a customer</b><span>Choose a conversation from the message list to reply.</span></div>}</section>
-  </div>
+  return <div className="wa-inbox"><aside className="wa-sidebar"><div className="wa-sidebar-head"><div><span className="muted">LIVE INBOX</span><h2>Messages</h2></div><span className="inbox-count">{liveConversations.length}</span></div><div className="wa-chat-list">{liveConversations.map(c=>{const ms=[...(c.support_messages||[])].sort((a:any,b:any)=>+new Date(b.created_at)-+new Date(a.created_at));const last=ms[0];return <button type="button" className={'wa-chat-row '+(selected?.id===c.id?'selected':'')} key={c.id} onClick={()=>setSelectedId(c.id)}><span className="wa-avatar">{(c.customer_name||'C').slice(0,1).toUpperCase()}</span><span className="wa-chat-main"><b>{c.customer_name||'Customer'}</b><small>{last?.body?.startsWith(IMAGE_PREFIX)?'📷 Photo':last?.body||'New customer conversation'}</small></span><span className="wa-chat-time">{last?.created_at?new Date(last.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):''}</span></button>})}</div></aside><section className="wa-window">{selected?<><header className="wa-header"><span className="wa-avatar header-avatar">{(selected.customer_name||'C').slice(0,1).toUpperCase()}</span><div><b>{selected.customer_name||'Customer'}</b><small>{selected.customer_email||selected.session_id||'Customer support'}</small></div><span className="wa-online">● Active</span></header><div className="wa-messages">{messages.map((m:any)=><div className={'wa-row '+(m.sender==='agent'?'outgoing':'incoming')} key={m.id}><div className={'wa-bubble '+m.sender}><span className="wa-sender">{m.sender==='agent'?'You':m.sender==='bot'?'UPC Support':'Customer'}</span><MessageContent body={m.body}/><small>{new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</small></div></div>)}{!messages.length&&<div className="wa-empty">No messages yet. New customer messages will appear here automatically.</div>}</div><form action={sendAgentMessage} className="wa-composer"><input type="hidden" name="conversation_id" value={selected.id}/><textarea name="body" placeholder="Type a message" required rows={1}/><button className="wa-send" type="submit">➤</button></form><div className="wa-actions">{selected.automation_paused?<form action={setConversationAutomation}><input type="hidden" name="conversation_id" value={selected.id}/><input type="hidden" name="paused" value="false"/><button type="submit">Resume automation</button></form>:<form action={setConversationAutomation}><input type="hidden" name="conversation_id" value={selected.id}/><input type="hidden" name="paused" value="true"/><button type="submit">Pause automation</button></form>}<form action={closeConversation}><input type="hidden" name="conversation_id" value={selected.id}/><button type="submit">Close chat</button></form></div></>:<div className="wa-empty"><b>Select a customer</b><span>Choose a conversation from the message list to reply.</span></div>}</section></div>
 }
