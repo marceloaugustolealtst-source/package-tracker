@@ -1,13 +1,12 @@
 'use client'
 
 import {useEffect,useMemo,useState} from 'react'
-import {useRouter} from 'next/navigation'
+import {createClient} from '@/lib/supabase-browser'
 
 type Conversation={id:string;customer_name?:string|null;customer_email?:string|null;session_id?:string|null;automation_paused?:boolean;support_messages:any[]}
 type Action=(formData:FormData)=>void|Promise<void>
 
 export default function AgentInbox({conversations,sendAgentMessage,setConversationAutomation,closeConversation}:{conversations:Conversation[];sendAgentMessage:Action;setConversationAutomation:Action;closeConversation:Action}){
-  const router=useRouter()
   const [selectedId,setSelectedId]=useState(conversations[0]?.id||'')
   const [liveConversations,setLiveConversations]=useState(conversations)
   const selected=useMemo(()=>liveConversations.find(c=>c.id===selectedId)||liveConversations[0], [liveConversations,selectedId])
@@ -16,20 +15,29 @@ export default function AgentInbox({conversations,sendAgentMessage,setConversati
   useEffect(()=>{setLiveConversations(conversations)},[conversations])
 
   useEffect(()=>{
-    const timer=window.setInterval(()=>router.refresh(),1500)
-    return()=>window.clearInterval(timer)
-  },[router])
+    const supabase=createClient()
+    let active=true
+    const reload=async()=>{
+      const {data:rows}=await supabase.from('support_conversations').select('*').neq('status','closed').order('updated_at',{ascending:false}).limit(100)
+      if(!active||!rows)return
+      const ids=rows.map((c:any)=>c.id).filter(Boolean)
+      let all:any[]=[]
+      if(ids.length){const result=await supabase.from('support_messages').select('id,conversation_id,sender,body,created_at').in('conversation_id',ids).order('created_at',{ascending:true}).limit(2000);all=result.data||[]}
+      const byId=new Map<string,any[]>()
+      all.forEach(m=>{const list=byId.get(m.conversation_id)||[];list.push(m);byId.set(m.conversation_id,list)})
+      if(active)setLiveConversations(rows.map((c:any)=>({...c,support_messages:byId.get(c.id)||[]})))
+    }
+    const channel=supabase.channel('agent-live-inbox')
+      .on('postgres_changes',{event:'*',schema:'public',table:'support_messages'},()=>reload())
+      .on('postgres_changes',{event:'*',schema:'public',table:'support_conversations'},()=>reload())
+      .subscribe()
+    return()=>{active=false;supabase.removeChannel(channel)}
+  },[])
 
   useEffect(()=>{
-    if(selectedId&&!liveConversations.some(c=>c.id===selectedId)) setSelectedId(liveConversations[0]?.id||'')
-    else if(!selectedId&&liveConversations[0]?.id) setSelectedId(liveConversations[0].id)
+    if(selectedId&&!liveConversations.some(c=>c.id===selectedId))setSelectedId(liveConversations[0]?.id||'')
+    else if(!selectedId&&liveConversations[0]?.id)setSelectedId(liveConversations[0].id)
   },[liveConversations,selectedId])
-
-  useEffect(()=>{
-    const onFocus=()=>router.refresh()
-    window.addEventListener('focus',onFocus)
-    return()=>window.removeEventListener('focus',onFocus)
-  },[router])
 
   return <div className="wa-inbox">
     <aside className="wa-sidebar">
