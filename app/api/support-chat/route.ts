@@ -10,9 +10,18 @@ function adminClient(){
 
 async function getOrCreateConversation(supabase:any,sessionId:string){
   if(!sessionId) throw new Error('Missing session id')
-  const found=await supabase.from('support_conversations').select('*').eq('session_id',sessionId).neq('status','closed').order('updated_at',{ascending:false}).limit(1).maybeSingle()
+  // session_id is unique in the database. Always look up the existing row,
+  // including closed conversations, before attempting an insert.
+  const found=await supabase.from('support_conversations').select('*').eq('session_id',sessionId).maybeSingle()
   if(found.error) throw found.error
-  if(found.data) return found.data
+  if(found.data){
+    if(found.data.status==='closed'){
+      const reopened=await supabase.from('support_conversations').update({status:'open',automation_stage:'awaiting_tracking',automation_paused:false,updated_at:new Date().toISOString()}).eq('id',found.data.id).select('*').single()
+      if(reopened.error) throw reopened.error
+      return reopened.data
+    }
+    return found.data
+  }
   const created=await supabase.from('support_conversations').insert({session_id:sessionId,status:'open',automation_stage:'awaiting_tracking',automation_paused:false,updated_at:new Date().toISOString()}).select('*').single()
   if(created.error) throw created.error
   return created.data
@@ -23,6 +32,7 @@ export async function POST(req:Request){
     const body=await req.json()
     const action=String(body?.action||'')
     const supabase=adminClient()
+
     if(action==='ensure'){
       const sessionId=String(body?.session_id||'').trim()
       const conversation=await getOrCreateConversation(supabase,sessionId)
@@ -36,6 +46,7 @@ export async function POST(req:Request){
       if(messages.error) throw messages.error
       return NextResponse.json({conversation,messages:messages.data||[]})
     }
+
     if(action==='messages'){
       const conversationId=String(body?.conversation_id||'').trim()
       if(!conversationId) return NextResponse.json({error:'Missing conversation id'},{status:400})
@@ -46,6 +57,7 @@ export async function POST(req:Request){
       if(messages.error) throw messages.error
       return NextResponse.json({conversation:conversation.data,messages:messages.data||[]})
     }
+
     if(action==='send'||action==='bot'){
       const conversationId=String(body?.conversation_id||'').trim()
       const sessionId=String(body?.session_id||'').trim()
@@ -59,14 +71,15 @@ export async function POST(req:Request){
       }
       if(!conversation&&sessionId) conversation=await getOrCreateConversation(supabase,sessionId)
       if(!conversation) return NextResponse.json({error:'Conversation not found; send a valid session id'},{status:404})
-      if(conversation.status==='closed') return NextResponse.json({error:'Conversation is closed'},{status:409})
+      if(conversation.status==='closed') conversation=await getOrCreateConversation(supabase,conversation.session_id)
       const sender=action==='bot'?'bot':'customer'
       const inserted=await supabase.from('support_messages').insert({conversation_id:conversation.id,sender,body:text}).select('id,conversation_id,sender,body,created_at').single()
       if(inserted.error) throw inserted.error
-      const updated=await supabase.from('support_conversations').update({updated_at:new Date().toISOString()}).eq('id',conversation.id)
+      const updated=await supabase.from('support_conversations').update({status:'open',updated_at:new Date().toISOString()}).eq('id',conversation.id)
       if(updated.error) throw updated.error
       return NextResponse.json({conversation_id:conversation.id,message:inserted.data})
     }
+
     if(action==='update'){
       const conversationId=String(body?.conversation_id||'').trim()
       const patch=body?.patch||{}
@@ -77,12 +90,14 @@ export async function POST(req:Request){
       if(updated.error) throw updated.error
       return NextResponse.json({conversation:updated.data})
     }
+
     if(action==='lookup'){
       const trackingNumber=String(body?.tracking_number||'').trim()
       const result=await supabase.rpc('get_tracking_package',{p_tracking_number:trackingNumber})
       if(result.error) throw result.error
       return NextResponse.json({packages:result.data||[]})
     }
+
     return NextResponse.json({error:'Unknown support chat action'},{status:400})
   }catch(error:any){
     console.error('support-chat',error)
