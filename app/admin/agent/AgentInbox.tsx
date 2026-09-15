@@ -1,15 +1,30 @@
 'use client'
 
-import {useMemo,useState} from 'react'
-import type {ReactNode} from 'react'
+import {useEffect,useMemo,useState} from 'react'
+import {useRouter} from 'next/navigation'
 
 type Conversation={id:string;customer_name?:string|null;customer_email?:string|null;session_id?:string|null;automation_paused?:boolean;support_messages:any[]}
 type Action=(formData:FormData)=>void|Promise<void>
 
 export default function AgentInbox({conversations,sendAgentMessage,setConversationAutomation,closeConversation}:{conversations:Conversation[];sendAgentMessage:Action;setConversationAutomation:Action;closeConversation:Action}){
+  const router=useRouter()
   const [selectedId,setSelectedId]=useState(conversations[0]?.id||'')
+
+  // The inbox data is loaded on the server. Refresh it automatically so new customer
+  // messages appear without the support agent having to reload the page manually.
+  useEffect(()=>{
+    const timer=window.setInterval(()=>router.refresh(),2000)
+    return()=>window.clearInterval(timer)
+  },[router])
+
+  useEffect(()=>{
+    if(!selectedId&&conversations[0]?.id)setSelectedId(conversations[0].id)
+    else if(selectedId&&!conversations.some(c=>c.id===selectedId))setSelectedId(conversations[0]?.id||'')
+  },[conversations,selectedId])
+
   const selected=useMemo(()=>conversations.find(c=>c.id===selectedId)||conversations[0], [conversations,selectedId])
   const messages=[...(selected?.support_messages||[])].sort((a:any,b:any)=>+new Date(a.created_at)-+new Date(b.created_at))
+
   return <div className="wa-inbox">
     <aside className="wa-sidebar">
       <div className="wa-sidebar-head"><div><span className="muted">LIVE INBOX</span><h2>Messages</h2></div><span className="inbox-count">{conversations.length}</span></div>
