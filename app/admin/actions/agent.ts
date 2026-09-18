@@ -27,6 +27,14 @@ export async function sendAgentMessage(formData:FormData){
   await supabase.from('support_messages').delete().eq('conversation_id',conversationId).eq('sender','bot').ilike('body','Checking your tracking number%')
   const {error}=await supabase.from('support_messages').insert({conversation_id:conversationId,sender:'agent',body})
   if(error)throw new Error(`Agent message failed: ${error.message}`)
+  // Email notification is deliberately best-effort: a notification failure must never undo the chat message.
+  try {
+    const url=process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
+    const secret=process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY
+    if(url&&secret){
+      await fetch(`${url}/functions/v1/support-email-notification`,{method:'POST',headers:{'Content-Type':'application/json','x-internal-secret':secret},body:JSON.stringify({conversation_id:conversationId,message_id:(await supabase.from('support_messages').select('id').eq('conversation_id',conversationId).eq('sender','agent').order('created_at',{ascending:false}).limit(1).maybeSingle()).data?.id})}).catch(()=>{})
+    }
+  } catch {}
   await supabase.from('support_conversations').update({updated_at:new Date().toISOString(),automation_paused:true,automation_stage:'agent_takeover'}).eq('id',conversationId)
   revalidatePath('/admin/agent')
 }
