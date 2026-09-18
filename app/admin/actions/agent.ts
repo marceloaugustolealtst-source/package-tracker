@@ -26,7 +26,7 @@ export async function sendAgentMessage(formData:FormData){
   if(!conversationId||!body)return
   await supabase.from('support_messages').delete().eq('conversation_id',conversationId).eq('sender','bot').ilike('body','Checking your tracking number%')
   const {error}=await supabase.from('support_messages').insert({conversation_id:conversationId,sender:'agent',body})
-  if(error)return
+  if(error)throw new Error(`Agent message failed: ${error.message}`)
   await supabase.from('support_conversations').update({updated_at:new Date().toISOString(),automation_paused:true,automation_stage:'agent_takeover'}).eq('id',conversationId)
   revalidatePath('/admin/agent')
 }
