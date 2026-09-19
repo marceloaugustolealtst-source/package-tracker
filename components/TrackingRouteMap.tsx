@@ -1,182 +1,19 @@
 'use client'
-
-import {useEffect,useMemo,useRef,useState} from 'react'
-import {createClient} from '@/lib/supabase-browser'
-
+import{useEffect,useMemo,useRef,useState}from'react'
 export type TrackingEvent={id:string;location:string|null;status:string;created_at?:string;description?:string;event_time?:string;latitude?:number|null;longitude?:number|null}
-type Point={name:string;country?:string;lat:number;lng:number}
-type Props={trackingNumber:string;origin:string;destination:string;status:string;transportMode?:string;events:TrackingEvent[]}
-
-declare global{interface Window{google?:any}}
-
-const normalize=(v:string='')=>v.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim()
-const duplicateCountry=(v:string='')=>{const parts=v.split(',').map(x=>x.trim()).filter(Boolean);if(parts.length>1&&normalize(parts[parts.length-1])===normalize(parts[parts.length-2]))parts.pop();return parts.join(', ')}
-const latestOf=(events:TrackingEvent[])=>events.slice().sort((a,b)=>new Date(b.event_time||b.created_at||0).getTime()-new Date(a.event_time||a.created_at||0).getTime())[0]||null
-
-function pointFromEvent(e:TrackingEvent|null):Point|null{
- if(!e)return null
- if(e.latitude!=null&&e.longitude!=null)return{name:e.location||'Current location',lat:Number(e.latitude),lng:Number(e.longitude)}
- return null
-}
-
-function loadGoogle(key:string):Promise<any>{
- return new Promise((resolve,reject)=>{
-  if(window.google?.maps)return resolve(window.google.maps)
-  const existing=document.querySelector('script[data-upc-google-maps]') as HTMLScriptElement|null
-  if(existing){existing.addEventListener('load',()=>resolve(window.google.maps));existing.addEventListener('error',reject);return}
-  const s=document.createElement('script')
-  s.src='https://maps.googleapis.com/maps/api/js?key='+encodeURIComponent(key)+'&v=weekly'
-  s.async=true;s.defer=true;s.dataset.upcGoogleMaps='1'
-  s.onload=()=>window.google?.maps?resolve(window.google.maps):reject(new Error('Google Maps did not initialize'))
-  s.onerror=reject
-  document.head.appendChild(s)
- })
-}
-
-const mapStyle=[
- {featureType:'all',elementType:'labels.text',stylers:[{color:'#263238'},{weight:700}]},
- {featureType:'road',elementType:'geometry',stylers:[{color:'#ffffff'}]},
- {featureType:'road',elementType:'geometry.stroke',stylers:[{color:'#b7bec4'},{weight:1.6}]},
- {featureType:'road.highway',elementType:'geometry',stylers:[{color:'#ffffff'},{weight:3}]},
- {featureType:'road.highway',elementType:'geometry.stroke',stylers:[{color:'#7f8a93'},{weight:2}]},
- {featureType:'road.arterial',elementType:'geometry',stylers:[{color:'#ffffff'},{weight:2.2}]},
- {featureType:'road.local',elementType:'geometry',stylers:[{color:'#f4f6f7'}]},
- {featureType:'water',elementType:'geometry',stylers:[{color:'#dbeaf2'}]},
- {featureType:'landscape',elementType:'geometry',stylers:[{color:'#eef1ed'}]},
- {featureType:'poi',elementType:'geometry',stylers:[{color:'#e2e6e1'}]},
- {featureType:'transit',elementType:'geometry',stylers:[{color:'#d9dde0'}]}
-]
-
-export default function TrackingRouteMap({trackingNumber,origin,destination,status,transportMode='Road',events:initialEvents}:Props){
- const ref=useRef<HTMLDivElement|null>(null)
- const mapRef=useRef<any>(null)
- const directionsRef=useRef<any>(null)
- const markerRefs=useRef<any[]>([])
- const timerRef=useRef<ReturnType<typeof setInterval>|null>(null)
- const [events,setEvents]=useState(initialEvents)
- const [statusLive,setStatusLive]=useState(status)
- const [ready,setReady]=useState(false)
- const [mapError,setMapError]=useState('')
- const latest=useMemo(()=>latestOf(events),[events])
- const currentPoint=useMemo(()=>pointFromEvent(latest),[latest])
- const currentText=duplicateCountry(latest?.location||origin||'Current location')
- const finalText=duplicateCountry(destination||'Destination')
- const moving=['processing','in_transit','out_for_delivery'].includes((statusLive||latest?.status||'').toLowerCase().replace(/\\s+/g,'_'))
- const mode=normalize(transportMode)
-
- useEffect(()=>{setEvents(initialEvents);setStatusLive(status)},[initialEvents,status])
-
- // Live shipment refresh: the page stays open while the tracking data changes.
- useEffect(()=>{
-  let cancelled=false
-  const poll=async()=>{
-   try{
-    const supabase=createClient()
-    const {data:pkg}=await supabase.rpc('get_tracking_package',{p_tracking_number:trackingNumber.toUpperCase()})
-    const p=pkg?.[0]
-    if(!p)return
-    const {data:ev}=await supabase.rpc('get_tracking_events',{p_shipment_id:p.id})
-    if(!cancelled){
-      setStatusLive(p.status||status)
-      if(ev)setEvents(ev as TrackingEvent[])
-    }
-   }catch{}
-  }
-  timerRef.current=setInterval(poll,15000)
-  return()=>{cancelled=true;if(timerRef.current)clearInterval(timerRef.current)}
- },[trackingNumber,status])
-
- useEffect(()=>{
-  let cancelled=false
-  const key=process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
-  if(!key){setMapError('Google Maps API key is not configured.');return}
-  loadGoogle(key).then((maps)=>{
-   if(cancelled||!ref.current)return
-   mapRef.current=new maps.Map(ref.current,{
-    center:{lat:20,lng:0},zoom:3,
-    disableDefaultUI:false,scrollwheel:false,gestureHandling:'cooperative',
-    fullscreenControl:true,mapTypeControl:false,streetViewControl:false,
-    styles:mapStyle
-   })
-   directionsRef.current=new maps.DirectionsService()
-   setReady(true)
-  }).catch(()=>{if(!cancelled)setMapError('The map service could not be loaded.')})
-  return()=>{cancelled=true;markerRefs.current.forEach(m=>m.setMap?.(null));markerRefs.current=[];mapRef.current=null}
- },[])
-
- useEffect(()=>{
-  if(!ready||!mapRef.current||!window.google?.maps)return
-  const maps=window.google.maps
-  const map=mapRef.current
-  markerRefs.current.forEach(m=>m.setMap(null));markerRefs.current=[]
-  const latestStatus=(statusLive||latest?.status||'').toLowerCase().replace(/\\s+/g,'_')
-  const current=latest?.location||origin
-  const destinationValue=destination
-  const bounds=new maps.LatLngBounds()
-
-  const addMarker=(position:any,label:string,kind:'current'|'destination')=>{
-   const marker=new maps.Marker({
-    map,position,title:label,
-    label:{text:kind==='current'?'UPC':'',color:kind==='current'?'#ffffff':'#d40511',fontWeight:'900',fontSize:'13px'},
-    icon:{path:maps.SymbolPath.CIRCLE,scale:kind==='current'?10:8,fillColor:kind==='current'?'#d40511':'#ffffff',fillOpacity:1,strokeColor:kind==='current'?'#ffffff':'#d40511',strokeWeight:4}
-   })
-   markerRefs.current.push(marker);bounds.extend(position)
-  }
-
-  const drawStraight=()=>{
-   const a=currentPoint
-   if(!a)return
-   const geocoder=new maps.Geocoder()
-   geocoder.geocode({address:destinationValue},(res:any,st:any)=>{
-    if(st!=='OK'||!res?.[0])return
-    const b=res[0].geometry.location
-    addMarker({lat:a.lat,lng:a.lng},duplicateCountry(currentText),'current')
-    addMarker(b,finalText,'destination')
-    new maps.Polyline({map,path:[{lat:a.lat,lng:a.lng},b],geodesic:true,strokeColor:'#d40511',strokeOpacity:1,strokeWeight:5})
-    bounds.extend(b);map.fitBounds(bounds,{top:70,right:45,bottom:45,left:45})
-   })
-  }
-
-  const canRoadRoute=['road','truck','parcel',''].includes(mode)&&current
-  if(canRoadRoute){
-   directionsRef.current.route({
-    origin:current,
-    destination:destinationValue,
-    travelMode:maps.TravelMode.DRIVING,
-    provideRouteAlternatives:false
-   },(result:any,st:any)=>{
-    if(st==='OK'&&result){
-     const renderer=new maps.DirectionsRenderer({
-      map,suppressMarkers:true,preserveViewport:false,
-      polylineOptions:{strokeColor:'#d40511',strokeOpacity:1,strokeWeight:6,zIndex:5}
-     })
-     renderer.setDirections(result)
-     directionsRef.current.__renderer=renderer
-     const leg=result.routes[0]?.legs?.[0]
-     if(leg){addMarker(leg.start_location,duplicateCountry(currentText),'current');addMarker(leg.end_location,finalText,'destination')}
-    }else drawStraight()
-   })
-  }else drawStraight()
-
-  return()=>{
-   if(directionsRef.current?.__renderer){directionsRef.current.__renderer.setMap(null);directionsRef.current.__renderer=null}
-   markerRefs.current.forEach(m=>m.setMap(null));markerRefs.current=[]
-  }
- },[ready,currentPoint,currentText,finalText,destination,origin,mode,statusLive,latest])
-
- const statusLabel=(statusLive||latest?.status||'in_transit').replace(/_/g,' ')
- return <section className="tracker-card">
-  <div className="summary">
-   <div><span className="eyebrow">SHIPMENT STATUS</span><h2>{statusLabel}</h2><p>Current location: {currentText}</p></div>
-   <span className={'pill '+(moving?'moving':'checkpoint')}>{moving?'LIVE':'UPDATED'}</span>
-  </div>
-  <div className="map-shell">
-   <div className="map-title"><b>UPC Shipment Journey</b><span>{currentText} → {finalText}</span></div>
-   <div ref={ref} className="real-map"/>
-   {mapError&&<div className="map-fallback"><b>Map unavailable</b><span>{mapError}</span><small>Tracking information remains available below.</small></div>}
-  </div>
-  {moving&&<div className="live-strip"><span className="pulse"/><b>LIVE TRACKING</b><span>Updates automatically every 15 seconds</span></div>}
-  <div className="timeline"><h3>Tracking history</h3>{events.length?events.slice().sort((a,b)=>new Date(b.event_time||b.created_at||0).getTime()-new Date(a.event_time||a.created_at||0).getTime()).map((e,i)=><div className="event" key={e.id||i}><div className={'event-dot '+(i===0?'current':'')}>{i!==0?'✓':''}</div><div><b>{e.status.replaceAll('_',' ')}</b><span>{duplicateCountry(e.location||'Shipment facility')}</span>{e.event_time&&<small>{new Date(e.event_time).toLocaleString()}</small>}{e.description&&<p>{e.description}</p>}</div></div>):<div className="empty">No tracking events have been recorded yet.</div>}</div>
-  <style jsx>{\`.tracker-card{margin-top:18px;border:1px solid #dfe3e7;border-radius:14px;background:#fff;overflow:hidden;box-shadow:0 8px 28px #10182812}.summary{padding:18px 20px;display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid #e5e7eb}.summary h2{margin:5px 0;text-transform:capitalize;font-size:24px;color:#101828}.summary p{margin:0;color:#667085;font-size:12px}.eyebrow{font-size:9px;font-weight:900;letter-spacing:.12em;color:#667085}.pill{padding:7px 11px;border-radius:18px;font-size:9px;font-weight:900}.moving{background:#e8f7ef;color:#087443}.checkpoint{background:#fff3f3;color:#c62828}.map-shell{height:520px;position:relative;background:#e8ecef}.real-map{position:absolute;inset:0}.map-title{position:absolute;z-index:5;top:14px;left:14px;background:#fff;border-left:5px solid #d40511;border-radius:3px;padding:10px 13px;box-shadow:0 3px 12px #0002}.map-title b{font-size:12px}.map-title span{display:block;margin-top:3px;font-size:10px;color:#667085}.map-fallback{position:absolute;inset:0;display:grid;place-items:center;align-content:center;gap:6px;background:#eef1ed;color:#344054;text-align:center;padding:20px}.map-fallback span,.map-fallback small{display:block;color:#667085}.live-strip{padding:10px 15px;display:flex;align-items:center;gap:8px;background:#f3fbf7;color:#087443;font-size:10px;border-top:1px solid #e4e7ec}.pulse{width:7px;height:7px;border-radius:50%;background:#087443;animation:pulse 1.2s infinite}@keyframes pulse{50%{opacity:.25}}.timeline{padding:20px;border-top:1px solid #e4e7ec}.timeline h3{margin:0 0 18px;font-size:18px}.event{display:flex;gap:12px;position:relative;padding:0 0 19px 25px;margin-left:6px;border-left:2px solid #c8dfd0}.event:last-child{border-left-color:transparent}.event-dot{position:absolute;left:-9px;top:0;width:16px;height:16px;border-radius:50%;background:#087443;color:#fff;border:3px solid #fff;box-shadow:0 0 0 1px #08744355;font-size:8px;display:grid;place-items:center}.event-dot.current{background:#fff;color:#087443}.event b{font-size:12px;text-transform:capitalize}.event span,.event small{display:block;margin-top:4px;color:#667085;font-size:10px}.event p{margin:5px 0 0;color:#667085;font-size:10px}.empty{color:#667085;font-size:12px}@media(max-width:760px){.map-shell{height:390px}.map-title span{display:none}.summary{padding:15px}.summary h2{font-size:21px}.timeline{padding:16px}}\`}</style>
- </section>
+type Point={name:string;country:string;lat:number;lng:number}
+declare global{interface Window{L?:any}}
+const cities:Point[]=[{name:'Hanoi',country:'Vietnam',lat:21.0278,lng:105.8342},{name:'Ho Chi Minh City',country:'Vietnam',lat:10.8231,lng:106.6297},{name:'Da Nang',country:'Vietnam',lat:16.0544,lng:108.2022},{name:'Lagos',country:'Nigeria',lat:6.5244,lng:3.3792},{name:'Abuja',country:'Nigeria',lat:9.0765,lng:7.3986},{name:'Port Harcourt',country:'Nigeria',lat:4.8156,lng:7.0498},{name:'São Paulo',country:'Brazil',lat:-23.5505,lng:-46.6333},{name:'Rio de Janeiro',country:'Brazil',lat:-22.9068,lng:-43.1729},{name:'Brasília',country:'Brazil',lat:-15.7939,lng:-47.8828},{name:'Salvador',country:'Brazil',lat:-12.9777,lng:-38.5016},{name:'New York',country:'United States',lat:40.7128,lng:-74.006},{name:'Los Angeles',country:'United States',lat:34.0522,lng:-118.2437},{name:'Miami',country:'United States',lat:25.7617,lng:-80.1918},{name:'London',country:'United Kingdom',lat:51.5074,lng:-0.1278},{name:'Paris',country:'France',lat:48.8566,lng:2.3522},{name:'Berlin',country:'Germany',lat:52.52,lng:13.405},{name:'Toronto',country:'Canada',lat:43.6532,lng:-79.3832},{name:'Dubai',country:'United Arab Emirates',lat:25.2048,lng:55.2708},{name:'Singapore',country:'Singapore',lat:1.3521,lng:103.8198},{name:'Tokyo',country:'Japan',lat:35.6762,lng:139.6503},{name:'Sydney',country:'Australia',lat:-33.8688,lng:151.2093},{name:'Mumbai',country:'India',lat:19.076,lng:72.8777},{name:'Delhi',country:'India',lat:28.6139,lng:77.209},{name:'Mexico City',country:'Mexico',lat:19.4326,lng:-99.1332},{name:'Toluca',country:'Mexico',lat:19.2826,lng:-99.6557},{name:'Monterrey',country:'Mexico',lat:25.6866,lng:-100.3161},{name:'Guadalajara',country:'Mexico',lat:20.6597,lng:-103.3496},{name:'Puebla',country:'Mexico',lat:19.0414,lng:-98.2063},{name:'Querétaro',country:'Mexico',lat:20.5888,lng:-100.3899},{name:'León',country:'Mexico',lat:21.1221,lng:-101.6801},{name:'Mérida',country:'Mexico',lat:20.9674,lng:-89.5926},{name:'Tijuana',country:'Mexico',lat:32.5149,lng:-117.0382},{name:'Johannesburg',country:'South Africa',lat:-26.2041,lng:28.0473},{name:'Cairo',country:'Egypt',lat:30.0444,lng:31.2357},{name:'Istanbul',country:'Türkiye',lat:41.0082,lng:28.9784},{name:'Warsaw',country:'Poland',lat:52.2297,lng:21.0122},{name:'Lisbon',country:'Portugal',lat:38.7223,lng:-9.1393},{name:'Buenos Aires',country:'Argentina',lat:-34.6037,lng:-58.3816}]
+const normalize=(v:string='')=>v.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();const placeLabel=(name:string='',country:string='')=>{const n=normalize(name),c=normalize(country);if(!name)return country||'';if(!country||n===c)return name;return `${name}, ${country}`}
+// Match a named city only. Never infer a location from a country name alone.
+const findPoint=(value:string)=>{const v=normalize(value);return cities.find(p=>v.includes(normalize(p.name)))||null}
+const latestEvent=(events:TrackingEvent[])=>[...events].sort((a,b)=>new Date(b.event_time||b.created_at||0).getTime()-new Date(a.event_time||a.created_at||0).getTime()).find(e=>Boolean(e.location)||e.latitude!=null&&e.longitude!=null)||null
+async function geocode(query:string):Promise<Point|null>{if(!query.trim())return null;try{const r=await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&addressdetails=1&q=${encodeURIComponent(query)}`,{headers:{'Accept-Language':'en'}});if(!r.ok)return null;const d=await r.json();const x=d?.[0];if(!x)return null;const a=x.address||{};return{name:String(a.city||a.town||a.village||a.municipality||query),country:String(a.country||''),lat:Number(x.lat),lng:Number(x.lon)}}catch{return null}}
+export default function TrackingRouteMap({origin,destination,status,events}:{origin:string;destination:string;status:string;events:TrackingEvent[]}){
+const ref=useRef<HTMLDivElement|null>(null),map=useRef<any>(null),timer=useRef<ReturnType<typeof setInterval>|null>(null);const[ready,setReady]=useState(false);const[resolvedCheckpoint,setResolvedCheckpoint]=useState<Point|null>(null);const[resolvedEnd,setResolvedEnd]=useState<Point|null>(null);const[resolvedRoute,setResolvedRoute]=useState<Point[]>([])
+const latest=useMemo(()=>latestEvent(events),[events]);const endFallback=useMemo(()=>findPoint(destination)||findPoint(origin)||null,[destination,origin]);const eventPoint=useMemo(()=>{if(!latest)return null;if(latest.latitude!=null&&latest.longitude!=null)return{name:latest.location||'Current location',country:'',lat:Number(latest.latitude),lng:Number(latest.longitude)};return findPoint(latest.location||'')},[latest]);const checkpoint=eventPoint||resolvedCheckpoint||endFallback;const end=resolvedEnd||endFallback||checkpoint;const locationText=latest?.location?.trim()||'';const currentStatus=(status||latest?.status||'').toLowerCase().trim().replace(/\s+/g,'_');const stopped=['at_checkpoint','at_hub','exception','delivered'].includes(currentStatus);const isProcessing=currentStatus==='processing';const isMoving=currentStatus==='in_transit'||isProcessing;const isOutForDelivery=currentStatus==='out_for_delivery'
+useEffect(()=>{let dead=false;const run=async()=>{const sorted=events.slice().sort((a,b)=>new Date(a.event_time||a.created_at||0).getTime()-new Date(b.event_time||b.created_at||0).getTime());const points:Point[]=[];for(const e of sorted){if(e.latitude!=null&&e.longitude!=null){points.push({name:e.location||'Checkpoint',country:'',lat:Number(e.latitude),lng:Number(e.longitude)});continue}const fp=findPoint(e.location||'');if(fp){points.push(fp);continue}if(e.location?.trim()){const p=await geocode(e.location);if(p)points.push({...p,name:e.location.trim()})}}const unique=points.filter((p,i,a)=>i===a.findIndex(x=>Math.abs(x.lat-p.lat)<.0001&&Math.abs(x.lng-p.lng)<.0001));if(!dead)setResolvedRoute(unique);if(locationText&&!eventPoint){const p=await geocode(locationText);if(!dead&&p)setResolvedCheckpoint({...p,name:locationText})}if(!resolvedEnd&&destination.trim()){const p=await geocode(destination);if(!dead&&p)setResolvedEnd(p)}};run();return()=>{dead=true}},[events,locationText,eventPoint,destination,resolvedEnd])
+useEffect(()=>{let dead=false;async function load(){if(!document.querySelector('link[data-leaflet]')){const l=document.createElement('link');l.rel='stylesheet';l.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';l.dataset.leaflet='1';document.head.appendChild(l)}if(!window.L){await new Promise<void>((r,j)=>{const s=document.createElement('script');s.src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';s.onload=()=>r();s.onerror=j;document.body.appendChild(s)})}if(dead||!ref.current)return;const L=window.L;map.current?.remove();map.current=L.map(ref.current,{scrollWheelZoom:false,zoomControl:true});L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors'}).addTo(map.current);setReady(true)}load().catch(()=>{});return()=>{dead=true;if(timer.current!==null){clearInterval(timer.current);timer.current=null}map.current?.remove();map.current=null}},[])
+useEffect(()=>{if(!ready||!map.current||!checkpoint)return;const L=window.L,m=map.current;if(timer.current!==null){clearInterval(timer.current);timer.current=null}const layers:any[]=[];const a=checkpoint,b=end||checkpoint;const routePoints=(resolvedRoute.length>1?resolvedRoute:[a,b]).filter(Boolean);const routeForMap=routePoints.length>1&&routePoints[routePoints.length-1].lat===b.lat&&routePoints[routePoints.length-1].lng===b.lng?routePoints:[...routePoints,b];if(routeForMap.length>1){const coords=routeForMap.map(p=>[p.lat,p.lng]);layers.push(L.polyline(coords,{color:'#ffffff',weight:11,opacity:.95,lineCap:'round',lineJoin:'round'}).addTo(m));layers.push(L.polyline(coords,{color:'#d40511',weight:5,opacity:1,lineCap:'round',lineJoin:'round'}).addTo(m));routeForMap.slice(0,-1).forEach((p,i)=>{layers.push(L.circleMarker([p.lat,p.lng],{radius:5,color:'#fff',weight:3,fillColor:'#d40511',fillOpacity:1}).addTo(m))})}const points=routeForMap.filter((p,i,arr)=>i===arr.findIndex(x=>Math.abs(x.lat-p.lat)<.0001&&Math.abs(x.lng-p.lng)<.0001));const currentLabel=placeLabel(a.name,a.country);layers.push(L.marker([a.lat,a.lng],{icon:L.divIcon({className:'current-location-pin',html:`<div class="pin-wrap"><div class="pin-label">📍 ${currentLabel}</div><div class="pin-triangle">🔻</div></div>`,iconSize:[220,70],iconAnchor:[110,70]})}).addTo(m));const statusIcon=isOutForDelivery?'🚚':'●';const popupHtml=`<div class="status-card"><strong>${statusTitle}</strong><span>${displayLocation}</span></div>`;if(stopped){layers.push(L.marker([a.lat,a.lng],{icon:L.divIcon({className:'shipment-icon',html:`<div class="vehicle-icon">${statusIcon}</div>`,iconSize:[52,44],iconAnchor:[26,22]})}).addTo(m).bindPopup(popupHtml,{closeButton:false,offset:[0,-12]}));}if(stopped){layers.push(L.marker([a.lat,a.lng],{icon:L.divIcon({className:'stop-marker',html:'<div>■</div>',iconSize:[34,34],iconAnchor:[17,17]})}).addTo(m))}const bounds=L.latLngBounds(points.map((p:any)=>[p.lat,p.lng]));m.fitBounds(bounds,{padding:[45,45],maxZoom:8});return()=>{if(timer.current!==null){clearInterval(timer.current);timer.current=null}layers.forEach(x=>{try{m.removeLayer(x)}catch{}})}},[ready,checkpoint,end,stopped,isMoving,isOutForDelivery]);const displayLocation=locationText||placeLabel(checkpoint?.name,checkpoint?.country)||'Location unavailable';const statusTitle=currentStatus==='processing'?'Processing':currentStatus==='in_transit'?'In Transit':currentStatus==='delivered'?'Delivered':currentStatus==='exception'?'Shipment exception':currentStatus==='at_checkpoint'?'At Checkpoint':currentStatus==='at_hub'?'At hub':currentStatus==='out_for_delivery'?'Out for delivery':'In Transit';const badgeTitle=currentStatus==='processing'?'MOVING':currentStatus==='in_transit'?'IN TRANSIT':currentStatus==='at_checkpoint'?'AT CHECKPOINT':currentStatus==='delivered'?'DELIVERED':currentStatus==='exception'?'EXCEPTION':currentStatus==='at_hub'?'AT HUB':currentStatus==='out_for_delivery'?'OUT FOR DELIVERY':'MOVING';const badgeClass=currentStatus==='at_checkpoint'?'checkpoint-badge':'moving'
+return <section className="tracker-card"><div className="summary"><div><span className="eyebrow">SHIPMENT STATUS</span><h2>{statusTitle}</h2><p>{`Current location: ${displayLocation}`}</p></div><span className={`pill ${badgeClass}`}>{badgeTitle}</span></div><div className="map-shell"><div className="map-title"><b>Shipment journey</b><span>{checkpoint?.name||'Current location'}{end&&end!==checkpoint?` → ${end.name}`:''}</span></div><div ref={ref} className="real-map"/></div>{(isMoving||isOutForDelivery)&&<div className="live-strip"><span className="pulse"/><b>{isProcessing?'MOVING':isOutForDelivery?'OUT FOR DELIVERY':'IN TRANSIT'}</b><span>Current location: <strong>{displayLocation}</strong></span></div>}<div className="timeline"><h3>Tracking history</h3>{events.length?events.slice().sort((a,b)=>new Date(b.event_time||b.created_at||0).getTime()-new Date(a.event_time||a.created_at||0).getTime()).map((e,i)=><div className="event" key={e.id||i}><div className={`event-dot ${i===0?'current':''}`} aria-label={i===0?'Current location':'Completed'}>{i!==0&&<span aria-hidden="true">✓</span>}</div><div><b>{e.status.replaceAll('_',' ')}</b><span>{e.location||'Shipment facility'}</span>{e.event_time&&<small>{new Date(e.event_time).toLocaleString()}</small>}{e.description&&<p>{e.description}</p>}</div></div>):<div className="empty">No tracking events have been recorded yet.</div>}</div><style jsx>{`.tracker-card{margin-top:18px;border:1px solid #e4e7ec;border-radius:18px;background:#fff;overflow:hidden;box-shadow:0 10px 32px #1018280d;display:grid;grid-template-columns:1fr;grid-template-rows:auto auto auto auto}.summary{grid-column:1;padding:18px 18px 16px;display:flex;justify-content:space-between;align-items:flex-start;gap:14px;border-bottom:1px solid #eef0f2}.summary h2{margin:5px 0;font-size:24px;letter-spacing:-.02em;color:#101828}.summary p{margin:0;color:#667085;font-size:12px;line-height:1.45}.map-shell{grid-column:1;height:430px;position:relative;background:#e9edf0}.real-map{position:absolute;inset:0}.map-title{position:absolute;z-index:1000;top:12px;left:12px;right:auto;display:flex;align-items:center;padding:9px 12px;background:#fff;border-left:4px solid #d40511;border-radius:4px;box-shadow:0 3px 12px #00000018;backdrop-filter:blur(8px)}.map-title b{font-size:12px;color:#101828}.map-title span{display:none}.clean-label.current{border-color:#087443;color:#087443}.current-location-pin{background:transparent;border:0}.pin-wrap{display:flex;flex-direction:column;align-items:center;gap:1px}.pin-label{background:#fff;border:2px solid #d40511;color:#222;border-radius:4px;padding:6px 12px;font-size:12px;font-weight:800;line-height:16px;white-space:nowrap;box-shadow:0 2px 8px #0002;text-align:center}.pin-triangle{font-size:30px;line-height:30px;font-weight:900;color:#d40511;filter:drop-shadow(0 2px 3px #0006)}.live-strip{grid-column:1;padding:10px 14px;display:flex;gap:7px;align-items:center;color:#087443;background:#f5fbf7;font-size:10px;border-top:1px solid #e4e7ec}.pulse{width:7px;height:7px;border-radius:50%;background:#087443;animation:pulse 1.2s infinite}@keyframes pulse{50%{opacity:.25}}.timeline{grid-column:1;padding:18px;overflow:auto;max-height:none;border-top:1px solid #e4e7ec;background:#fff}.timeline h3{margin:0 0 18px;font-size:18px;color:#101828}.event{position:relative;display:flex;gap:12px;padding:0 0 20px 25px;margin-left:6px;border-left:2px solid #b7d9c5}.event:last-child{border-left-color:transparent}.event-dot{position:absolute;left:-9px;top:0;width:16px;height:16px;border-radius:50%;background:#087443;border:3px solid #fff;box-shadow:0 0 0 1px #08744355;display:grid;place-items:center;color:#fff}.event-dot span{display:block;font-size:10px;font-weight:900;line-height:10px;color:#fff!important}.event b{display:block;font-size:12px;text-transform:capitalize;color:#101828}.event:first-of-type b{color:#087443}.event-dot:before{content:''}.event-dot.current{background:#fff;border-color:#087443}.event-dot.current:after{content:'';width:6px;height:6px;border-radius:50%;background:#087443}.event-dot span{display:block}.event span,.event small{display:block;margin-top:4px;color:#667085;font-size:10px}.event p{margin:5px 0 0;color:#667085;font-size:10px;line-height:1.45}.details{grid-column:1;display:grid;grid-template-columns:1fr;padding:16px;gap:14px;border:0;border-top:1px solid #e4e7ec;border-radius:0;box-shadow:none}.details b{display:block;font-size:11px;margin-top:4px}.muted{display:block;color:#667085;font-size:10px}.eyebrow{font-size:9px;font-weight:800;color:#667085;letter-spacing:.12em}.pill{padding:7px 9px;border-radius:20px;font-size:9px;font-weight:900}.moving{color:#087443;background:#e9f8ef}.checkpoint-badge{color:#c62828;background:#ffebee}.real-map :global(.motion-icon),.real-map :global(.shipment-icon),.real-map :global(.route-direction),.real-map :global(.nearby-city),.real-map :global(.clean-location-label),.real-map :global(.fixed-location-label),.real-map :global(.motion-arrow),.real-map :global(.stop-marker){background:transparent!important;border:0!important}.real-map :global(.vehicle-icon){display:grid;place-items:center;width:52px;height:42px;font-size:30px;filter:drop-shadow(0 2px 3px #0005);animation:vehiclePulse 1.2s infinite}@keyframes vehiclePulse{50%{transform:scale(1.08)}}.real-map :global(.clean-label){display:block;padding:4px 8px;background:#fff;border:1px solid #d0d5dd;border-radius:14px;box-shadow:0 2px 7px #0002;color:#344054;font-size:10px;font-weight:800;text-align:center;white-space:nowrap}.real-map :global(.status-card){display:flex;flex-direction:column;gap:3px;min-width:145px;padding:9px 11px;background:#fff;border:1px solid #d0d5dd;border-radius:8px;box-shadow:0 4px 16px #0003;color:#101828}.real-map :global(.status-card strong){font-size:12px}.real-map :global(.status-card span){font-size:11px;font-weight:700}.real-map :global(.status-card small){font-size:9px;color:#667085}.real-map :global(.route-direction){display:none!important}.real-map :global(.route-direction div){display:none!important}.real-map :global(.nearby-city span){font-size:9px;color:#475467;background:#ffffffcc;padding:2px 4px;border-radius:3px;white-space:nowrap}.real-map :global(.stop-marker div){display:grid;width:30px;height:30px;place-items:center;border-radius:50%;background:#fff;color:#c62828;border:3px solid #c62828;box-shadow:0 0 0 6px #c6282826}@media(min-width:851px){.tracker-card{grid-template-columns:minmax(0,2fr) minmax(330px,.95fr);grid-template-rows:auto 520px auto}.summary{grid-column:1/-1}.map-shell{grid-column:1;grid-row:2;height:520px}.live-strip{grid-column:1;grid-row:3}.timeline{grid-column:2;grid-row:2/4;padding:20px;max-height:550px;border-top:0;border-left:1px solid #e4e7ec}.details{grid-column:1;grid-row:4;grid-template-columns:repeat(3,1fr)}}@media(max-width:430px){.map-shell{height:390px}.summary h2{font-size:22px}.summary{padding:16px}.timeline{padding:16px}}`}</style></section>
 }
