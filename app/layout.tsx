@@ -1,3 +1,4 @@
+import 'leaflet/dist/leaflet.css'
 import './globals.css'
 import './realistic-media.css'
 import './admin/admin.module.css'
