@@ -155,7 +155,7 @@ export default function TrackingRouteMap({trackingNumber,origin,destination,stat
      directionsRef.current.__renderer=renderer
      const leg=result.routes[0]?.legs?.[0]
      if(leg){addMarker(leg.start_location,duplicateCountry(currentText),'current');addMarker(leg.end_location,finalText,'destination')}
-     checkpointPoints.forEach(p=>{if(Math.abs(p.lat-aLat(result))<0.0001&&Math.abs(p.lng-aLng(result))<0.0001)return;new maps.Circle({map,center:{lat:p.lat,lng:p.lng},radius:350,fillColor:'#d40511',fillOpacity:.9,strokeColor:'#fff',strokeWeight:3})})
+     
     }else drawStraight()
    })
   }else drawStraight()
