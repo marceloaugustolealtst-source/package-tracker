@@ -39,21 +39,18 @@ export default function TrackingRouteMap({trackingNumber,origin,destination,stat
    const end=await geocode(destinationText)
    if(dead)return
    layersRef.current.forEach(x=>x.remove());layersRef.current=[]
-   const all=(points.length?points:[]).slice()
+   const all=(points.length?points:[]).slice().sort((a,b)=>a.lat-b.lat||a.lng-b.lng)
    if(start&&!all.some(p=>Math.abs(p.lat-start.lat)<.0001&&Math.abs(p.lng-start.lng)<.0001))all.push(start)
    if(end)all.push(end)
-   if(all.length>1){
-    const line=L.polyline(all.map(p=>[p.lat,p.lng] as [number,number]),{color:'#351c15',weight:5,opacity:.9,lineCap:'round',lineJoin:'round',dashArray:undefined}).addTo(map)
-    layersRef.current.push(line)
-   }
+   if(all.length>1){ const line=L.polyline(all.map(p=>[p.lat,p.lng] as [number,number]),{color:'#351c15',weight:4,opacity:.7,lineCap:'round',lineJoin:'round'}).addTo(map); layersRef.current.push(line) }
    all.forEach((p,i)=>{
     const isCurrent=start&&Math.abs(p.lat-start.lat)<.0001&&Math.abs(p.lng-start.lng)<.0001
-    const marker=L.marker([p.lat,p.lng],{icon:L.divIcon({className:'upc-location',html:`<div class="upc-box">📍 ${clean(p.name)}</div><div class="upc-arrow">🔻</div>`,iconSize:[180,58],iconAnchor:[90,52]})}).addTo(map)
+    const marker=L.marker([p.lat,p.lng],{icon:L.divIcon({className:'upc-location',html:isCurrent?`<div class="upc-box">📍 ${clean(p.name)}</div><div class="upc-arrow">🔻</div>`:'',iconSize:isCurrent?[180,58]:[1,1],iconAnchor:isCurrent?[90,52]:[0,0]})}).addTo(map)
     if(isCurrent)marker.bindTooltip(clean(p.name),{permanent:false})
     else marker.setOpacity(i===all.length-1?.65:1)
     layersRef.current.push(marker)
    })
-   if(all.length)map.fitBounds(L.latLngBounds(all.map(p=>[p.lat,p.lng] as [number,number])),{padding:[35,35],maxZoom:7})
+   if(all.length)map.fitBounds(L.latLngBounds(all.map(p=>[p.lat,p.lng] as [number,number])),{padding:[70,70],maxZoom:6})
    setError('')
   }).catch(()=>setError('Map could not be loaded.'))
   return()=>{dead=true;layersRef.current.forEach(x=>x.remove());layersRef.current=[];mapRef.current?.remove();mapRef.current=null}
