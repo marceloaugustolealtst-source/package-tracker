@@ -211,7 +211,7 @@ export default function TrackingRouteMap({origin,destination,status,events:initi
         <h2>{statusLabel}</h2>
         <p>Current location: {currentText}</p>
       </div>
-      <span className={'pill '+(moving?'moving':'checkpoint')}>{moving?'LIVE':'UPDATED'}</span>
+      
     </div>
     <div className="map-shell">
       <div className="map-title"><b>UPC Shipment Journey</b></div>
@@ -238,7 +238,7 @@ export default function TrackingRouteMap({origin,destination,status,events:initi
       .upc-location-box,.upc-destination-box{background:#fff;border:2px solid #351c15;border-radius:7px;box-shadow:0 3px 12px #0003;color:#351c15;padding:7px 11px;font-size:11px;font-weight:800;text-align:center;white-space:nowrap}
       .upc-destination-box{border-color:#ffca05}.upc-destination-dot{width:16px;height:16px;border-radius:50%;background:#ffca05;border:4px solid #351c15;box-shadow:0 2px 8px #0003}.upc-location-arrow{font-size:28px;line-height:28px;text-align:center;filter:drop-shadow(0 2px 3px #0006)}
       .live-strip{padding:9px 16px;display:flex;gap:8px;align-items:center;border-top:1px solid #eee;font-size:11px}.pulse{width:8px;height:8px;border-radius:50%;background:#ffca05}
-      .timeline{padding:20px;background:#fff}.timeline h3{margin:0 0 15px;color:#351c15}.event{display:flex;gap:12px;padding:0 0 18px}.event-dot{width:22px;height:22px;flex:0 0 22px;border-radius:50%;background:#351c15;color:#fff;display:grid;place-items:center;font-size:11px;font-weight:900}.event-dot.current{background:#ffca05;color:#351c15;border:2px solid #351c15}.event b{display:block;text-transform:capitalize;color:#351c15}.event span,.event small{display:block;color:#667085;font-size:11px;margin-top:3px}.event p{margin:5px 0 0;color:#475467;font-size:11px}
+      .timeline{padding:20px;background:#fff}.timeline h3{margin:0 0 15px;color:#351c15}.event{display:flex;gap:12px;padding:0 0 18px}.event-dot{width:22px;height:22px;flex:0 0 22px;border-radius:50%;background:#351c15;color:#fff;display:grid;place-items:center;font-size:11px;font-weight:900}.event-dot.current{background:#e00000;color:#fff;border:2px solid #b00000;animation:checkpointPulse 1.2s infinite}.checkpoint-tag{display:inline-block;font-size:8px;letter-spacing:.08em;background:#e00000;color:#fff;border-radius:4px;padding:3px 5px;margin-right:5px}@keyframes checkpointPulse{0%,100%{box-shadow:0 0 0 0 #e0000044}50%{box-shadow:0 0 0 7px #e0000014}}.event b{display:block;text-transform:capitalize;color:#351c15}.event span,.event small{display:block;color:#667085;font-size:11px;margin-top:3px}.event p{margin:5px 0 0;color:#475467;font-size:11px}
     `}</style>
   </section>
 }
