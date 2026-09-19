@@ -177,11 +177,11 @@ export default function TrackingRouteMap({origin,destination,status,events:initi
       if(end){
         const destinationIcon=L.divIcon({
           className:'upc-destination-marker',
-          html:`<div class="upc-destination-box">Destination<br/><strong>${destinationText}</strong></div>`,
-          iconSize:[170,50],
-          iconAnchor:[85,25]
+          html:'<div class="upc-destination-dot"></div>',
+          iconSize:[22,22],
+          iconAnchor:[11,11]
         })
-        const destinationMarker=L.marker([end.lat,end.lng],{icon:destinationIcon,title:destinationText}).addTo(map)
+        const destinationMarker=L.marker([end.lat,end.lng],{icon:destinationIcon,title:'Destination'}).addTo(map)
         layerRef.current.push(destinationMarker)
 
         const bounds=L.latLngBounds([[fallback.lat,fallback.lng],[end.lat,end.lng]])
@@ -214,7 +214,7 @@ export default function TrackingRouteMap({origin,destination,status,events:initi
       <span className={'pill '+(moving?'moving':'checkpoint')}>{moving?'LIVE':'UPDATED'}</span>
     </div>
     <div className="map-shell">
-      <div className="map-title"><b>UPC Shipment Journey</b><span>{currentText} → {destinationText}</span></div>
+      <div className="map-title"><b>UPC Shipment Journey</b></div>
       <div ref={ref} className="real-map"/>
       {mapError&&<div className="map-fallback"><b>Map unavailable</b><span>{mapError}</span></div>}
     </div>
@@ -236,7 +236,7 @@ export default function TrackingRouteMap({origin,destination,status,events:initi
       .map-title{position:absolute;z-index:1000;top:14px;left:14px;background:#fff;border-left:5px solid #ffca05;border-radius:4px;padding:10px 13px;box-shadow:0 3px 12px #0002}.map-title b{font-size:12px;color:#351c15}.map-title span{display:block;margin-top:3px;font-size:10px;color:#667085}
       .map-fallback{position:absolute;inset:0;z-index:2000;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#eef1ed}.map-fallback span{color:#667085;margin-top:5px}
       .upc-location-box,.upc-destination-box{background:#fff;border:2px solid #351c15;border-radius:7px;box-shadow:0 3px 12px #0003;color:#351c15;padding:7px 11px;font-size:11px;font-weight:800;text-align:center;white-space:nowrap}
-      .upc-destination-box{border-color:#ffca05}.upc-location-arrow{font-size:28px;line-height:28px;text-align:center;filter:drop-shadow(0 2px 3px #0006)}
+      .upc-destination-box{border-color:#ffca05}.upc-destination-dot{width:16px;height:16px;border-radius:50%;background:#ffca05;border:4px solid #351c15;box-shadow:0 2px 8px #0003}.upc-location-arrow{font-size:28px;line-height:28px;text-align:center;filter:drop-shadow(0 2px 3px #0006)}
       .live-strip{padding:9px 16px;display:flex;gap:8px;align-items:center;border-top:1px solid #eee;font-size:11px}.pulse{width:8px;height:8px;border-radius:50%;background:#ffca05}
       .timeline{padding:20px;background:#fff}.timeline h3{margin:0 0 15px;color:#351c15}.event{display:flex;gap:12px;padding:0 0 18px}.event-dot{width:22px;height:22px;flex:0 0 22px;border-radius:50%;background:#351c15;color:#fff;display:grid;place-items:center;font-size:11px;font-weight:900}.event-dot.current{background:#ffca05;color:#351c15;border:2px solid #351c15}.event b{display:block;text-transform:capitalize;color:#351c15}.event span,.event small{display:block;color:#667085;font-size:11px;margin-top:3px}.event p{margin:5px 0 0;color:#475467;font-size:11px}
     `}</style>
