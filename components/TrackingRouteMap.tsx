@@ -113,6 +113,7 @@ export default function TrackingRouteMap({trackingNumber,origin,destination,stat
   const current=latest?.location||origin
   const destinationValue=destination
   const bounds=new maps.LatLngBounds()
+  const checkpointPoints=events.slice().sort((a,b)=>new Date(a.event_time||a.created_at||0).getTime()-new Date(b.event_time||b.created_at||0).getTime()).map(pointFromEvent).filter(Boolean) as Point[]
 
   const addMarker=(position:any,label:string,kind:'current'|'destination')=>{
    const marker=new maps.Marker({
@@ -132,7 +133,7 @@ export default function TrackingRouteMap({trackingNumber,origin,destination,stat
     const b=res[0].geometry.location
     addMarker({lat:a.lat,lng:a.lng},duplicateCountry(currentText),'current')
     addMarker(b,finalText,'destination')
-    new maps.Polyline({map,path:[{lat:a.lat,lng:a.lng},b],geodesic:true,strokeColor:'#d40511',strokeOpacity:1,strokeWeight:5})
+    new maps.Polyline({map,path:[...checkpointPoints.map(p=>({lat:p.lat,lng:p.lng})),{lat:a.lat,lng:a.lng},b].filter((p,i,arr)=>i===0||Math.abs(p.lat-arr[i-1].lat)>0.0001||Math.abs(p.lng-arr[i-1].lng)>0.0001),geodesic:true,strokeColor:'#d40511',strokeOpacity:1,strokeWeight:6,zIndex:5})
     bounds.extend(b);map.fitBounds(bounds,{top:70,right:45,bottom:45,left:45})
    })
   }
@@ -154,6 +155,7 @@ export default function TrackingRouteMap({trackingNumber,origin,destination,stat
      directionsRef.current.__renderer=renderer
      const leg=result.routes[0]?.legs?.[0]
      if(leg){addMarker(leg.start_location,duplicateCountry(currentText),'current');addMarker(leg.end_location,finalText,'destination')}
+     checkpointPoints.forEach(p=>{if(Math.abs(p.lat-aLat(result))<0.0001&&Math.abs(p.lng-aLng(result))<0.0001)return;new maps.Circle({map,center:{lat:p.lat,lng:p.lng},radius:350,fillColor:'#d40511',fillOpacity:.9,strokeColor:'#fff',strokeWeight:3})})
     }else drawStraight()
    })
   }else drawStraight()
