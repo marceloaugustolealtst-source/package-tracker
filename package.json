@@ -15,7 +15,8 @@
     "next": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "lucide-react": "latest"
+    "lucide-react": "latest",
+    "leaflet": "^1.9.4"
   },
   "devDependencies": {
     "typescript": "latest",
@@ -24,6 +25,7 @@
     "@types/react-dom": "latest",
     "tailwindcss": "latest",
     "@tailwindcss/postcss": "latest",
-    "postcss": "latest"
+    "postcss": "latest",
+    "@types/leaflet": "^1.9.20"
   }
 }
