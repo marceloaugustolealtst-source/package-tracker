@@ -81,7 +81,7 @@ export default function TrackingRouteMap({origin,destination,status,events:initi
   const [mapError,setMapError]=useState('')
 
   const latest=useMemo(()=>latestEvent(events),[events])
-  const latestIsCheckpoint=!!latest?.description?.toLowerCase().includes('checkpoint: checkpoint')
+  const latestIsCheckpoint=(latest?.status||liveStatus||'').toLowerCase()==='checkpoint'
   const currentText=simpleLocation(latest?.location||origin||'Current location')
   const destinationText=simpleLocation(destination||'Destination')
   const moving=['processing','in_transit','out_for_delivery'].includes((liveStatus||latest?.status||'').toLowerCase().replace(/\s+/g,'_'))
