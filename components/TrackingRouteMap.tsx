@@ -81,6 +81,7 @@ export default function TrackingRouteMap({origin,destination,status,events:initi
   const [mapError,setMapError]=useState('')
 
   const latest=useMemo(()=>latestEvent(events),[events])
+  const latestIsCheckpoint=!!latest?.description?.toLowerCase().includes('checkpoint: checkpoint')
   const currentText=simpleLocation(latest?.location||origin||'Current location')
   const destinationText=simpleLocation(destination||'Destination')
   const moving=['processing','in_transit','out_for_delivery'].includes((liveStatus||latest?.status||'').toLowerCase().replace(/\s+/g,'_'))
@@ -211,7 +212,7 @@ export default function TrackingRouteMap({origin,destination,status,events:initi
         <h2>{statusLabel}</h2>
         <p>Current location: {currentText}</p>
       </div>
-      <span className={'pill '+(moving?'moving':'checkpoint')}>{moving?'LIVE':'UPDATED'}</span>
+      <span className={'pill '+(latestIsCheckpoint?'checkpoint-active':moving?'moving':'checkpoint')}>{latestIsCheckpoint?'CHECKPOINT':moving?'LIVE':'UPDATED'}</span>
     </div>
     <div className="map-shell">
       <div className="map-title"><b>UPC Shipment Journey</b></div>
@@ -222,16 +223,16 @@ export default function TrackingRouteMap({origin,destination,status,events:initi
     <div className="timeline">
       <h3>Tracking history</h3>
       {events.length?events.slice().sort((a,b)=>new Date(b.event_time||b.created_at||0).getTime()-new Date(a.event_time||a.created_at||0).getTime()).map((e,i)=><div className="event" key={e.id||i}>
-        <div className={'event-dot '+(i===0?'current':'')}>{i!==0?'✓':''}</div>
+        <div className={'event-dot '+(i===0?'current ':'')+(i===0&&latestIsCheckpoint?'checkpoint-current ':'')}>{i!==0?'✓':''}</div>
         <div><b>{e.status.replaceAll('_',' ')}</b><span>{simpleLocation(e.location||'Shipment facility')}</span>{e.event_time&&<small>{new Date(e.event_time).toLocaleString()}</small>}{e.description&&<p>{e.description}</p>}</div>
       </div>):<div className="empty">No tracking events have been recorded yet.</div>}
     </div>
     <style jsx>{`
-      .tracker-card{margin-top:18px;border:1px solid #dfe3e7;border-radius:14px;background:#fff;overflow:hidden;box-shadow:0 8px 28px #10182812}
+      @keyframes checkpointBlink{0%,100%{opacity:1;box-shadow:0 0 0 0 #dc262655}50%{opacity:.55;box-shadow:0 0 0 6px #dc26261c}}.tracker-card{margin-top:18px;border:1px solid #dfe3e7;border-radius:14px;background:#fff;overflow:hidden;box-shadow:0 8px 28px #10182812}
       .summary{padding:18px 20px;display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid #e5e7eb}
       .summary h2{margin:5px 0;text-transform:capitalize;font-size:24px;color:#351c15}
       .summary p{margin:0;color:#667085;font-size:12px}.eyebrow{font-size:9px;font-weight:900;letter-spacing:.12em;color:#7a1f16}
-      .pill{padding:7px 11px;border-radius:18px;font-size:9px;font-weight:900}.moving{background:#fff0c2;color:#351c15}.checkpoint{background:#f5f5f3;color:#7a1f16}
+      .pill{padding:7px 11px;border-radius:18px;font-size:9px;font-weight:900}.checkpoint-active{background:#fee2e2;color:#b00000;border:1px solid #dc2626;animation:checkpointBlink 1s infinite}.moving{background:#fff0c2;color:#351c15}.checkpoint{background:#f5f5f3;color:#7a1f16}
       .map-shell{height:520px;position:relative;background:#e9edf0}.real-map{position:absolute;inset:0}
       .map-title{position:absolute;z-index:1000;top:14px;left:14px;background:#fff;border-left:5px solid #ffca05;border-radius:4px;padding:10px 13px;box-shadow:0 3px 12px #0002}.map-title b{font-size:12px;color:#351c15}.map-title span{display:block;margin-top:3px;font-size:10px;color:#667085}
       .map-fallback{position:absolute;inset:0;z-index:2000;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#eef1ed}.map-fallback span{color:#667085;margin-top:5px}
