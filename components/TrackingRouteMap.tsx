@@ -234,7 +234,7 @@ export default function TrackingRouteMap({origin,destination,status,events:initi
       .summary{padding:18px 20px;display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid #e5e7eb}
       .summary h2{margin:5px 0;text-transform:capitalize;font-size:24px;color:#351c15}
       .summary p{margin:0;color:#667085;font-size:12px}.eyebrow{font-size:9px;font-weight:900;letter-spacing:.12em;color:#7a1f16}
-      .pill{padding:7px 11px;border-radius:18px;font-size:9px;font-weight:900}.checkpoint-active{background:#fee2e2;color:#b00000;border:1px solid #dc2626;animation:checkpointBlink 1s infinite}.moving{background:#fff0c2;color:#351c15}.checkpoint{background:#f5f5f3;color:#7a1f16}
+      .pill{padding:7px 11px;border-radius:18px;font-size:9px;font-weight:900}.checkpoint-active{background:#fee2e2;color:#b00000;border:1px solid #dc2626;animation:checkpointBlink 1s infinite}.moving{background:#dcfce7;color:#16a34a;border:1px solid #16a34a}.moving::before{content:'●';margin-right:5px;display:inline-block;animation:liveGreenPulse 1.2s infinite}.checkpoint{background:#f5f5f3;color:#7a1f16}
       .map-shell{height:520px;position:relative;background:#e9edf0}.real-map{position:absolute;inset:0}
       .map-title{position:absolute;z-index:1000;top:14px;left:14px;background:#fff;border-left:5px solid #ffca05;border-radius:4px;padding:10px 13px;box-shadow:0 3px 12px #0002}.map-title b{font-size:12px;color:#351c15}.map-title span{display:block;margin-top:3px;font-size:10px;color:#667085}
       .map-fallback{position:absolute;inset:0;z-index:2000;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#eef1ed}.map-fallback span{color:#667085;margin-top:5px}
