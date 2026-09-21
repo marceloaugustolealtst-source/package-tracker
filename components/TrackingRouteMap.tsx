@@ -13,6 +13,7 @@ type Props={
   origin:string
   destination:string
   status:string
+  transportMode?:string
   events:TrackingEvent[]
 }
 
