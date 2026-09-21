@@ -9,6 +9,7 @@ export type TrackingEvent={id:string;location:string|null;status:string;created_
 type Point={name:string;country?:string;lat:number;lng:number}
 
 type Props={
+  trackingNumber?:string
   origin:string
   destination:string
   status:string
