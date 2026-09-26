@@ -2,7 +2,7 @@ import Link from 'next/link'
 import './agent.module.css'
 import {createClient} from '@/lib/supabase-server'
 import {createAdminClient} from '@/lib/supabase-admin'
-import {updateAgentSettings,sendAgentMessage,setConversationAutomation,closeConversation} from '../actions/agent'
+import {updateAgentSettings,sendAgentMessage,setConversationAutomation,closeConversation,deleteSupportMessage} from '../actions/agent'
 import AgentInbox from './AgentInbox'
 
 export const dynamic='force-dynamic'
@@ -41,6 +41,6 @@ export default async function AgentControl(){
       <form action={updateAgentSettings} className="card agent-settings"><div className="list-head"><div><span className="muted">AGENT STATUS</span><h2>Support availability</h2></div><span className={online?'agent-status online':'agent-status offline'}>{online?'● Online':'● Offline'}</span></div><label className="control-toggle"><input type="checkbox" name="agent_online" defaultChecked={online}/><span><b>Agent available</b><small>Show the Agent as ready to help customers.</small></span></label><label className="control-toggle"><input type="checkbox" name="automated_replies" defaultChecked={automated}/><span><b>Automated replies</b><small>Allow automated replies when a conversation is not paused.</small></span></label><label className="control-toggle"><input type="checkbox" name="typing" defaultChecked={typing}/><span><b>Typing indicator</b><small>Show a realistic typing state before automated replies.</small></span></label><button className="btn btn-primary">Save agent settings</button></form>
       <section className="card agent-guide"><span className="muted">HOW TO REPLY</span><h2>WhatsApp-style support</h2><p>Guest and registered customer conversations appear in the message list. Select one to open the full chat on the right and reply directly.</p><div className="agent-rule"><b>1. Choose a customer</b><span>Tap any guest or registered customer.</span></div><div className="agent-rule"><b>2. Read the chat</b><span>Customer messages appear on the left and your replies on the right.</span></div><div className="agent-rule"><b>3. Reply</b><span>Type in the message box and press send.</span></div></section>
     </section>
-    <section className="card conversations"><AgentInbox conversations={inboxConversations as any} sendAgentMessage={sendAgentMessage} setConversationAutomation={setConversationAutomation} closeConversation={closeConversation}/></section>
+    <section className="card conversations"><AgentInbox conversations={inboxConversations as any} sendAgentMessage={sendAgentMessage} setConversationAutomation={setConversationAutomation} closeConversation={closeConversation} deleteSupportMessage={deleteSupportMessage}/></section>
   </main>
 }
