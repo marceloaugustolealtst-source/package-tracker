@@ -39,6 +39,16 @@ export async function sendAgentMessage(formData:FormData){
   revalidatePath('/admin/agent')
 }
 
+export async function deleteSupportMessage(formData:FormData){
+  const {supabase}=await admin()
+  const messageId=String(formData.get('message_id')||'')
+  const conversationId=String(formData.get('conversation_id')||'')
+  if(!messageId||!conversationId)return
+  const {error}=await supabase.from('support_messages').delete().eq('id',messageId).eq('conversation_id',conversationId)
+  if(error)throw new Error(`Message delete failed: ${error.message}`)
+  revalidatePath('/admin/agent')
+}
+
 export async function setConversationAutomation(formData:FormData){
   const {supabase}=await admin()
   const conversationId=String(formData.get('conversation_id')||'')
