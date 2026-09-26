@@ -63,7 +63,7 @@ export async function POST(req:Request){
         const greeting=await supabase.from('support_messages').insert({conversation_id:conversation.id,sender:'bot',body:'Hello! I’m the UPC Support Agent. If you want to track your package, please send your tracking number.'})
         if(greeting.error) throw greeting.error
       }
-      await supabase.from('support_conversations').update({user_last_read_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',conversation.id).eq('session_id',sessionId)
+      await supabase.from('support_conversations').update({user_last_read_at:new Date().toISOString()}).eq('id',conversation.id).eq('session_id',sessionId)
       const messages=await supabase.from('support_messages').select('id,sender,body,created_at').eq('conversation_id',conversation.id).order('created_at',{ascending:true})
       if(messages.error) throw messages.error
       return NextResponse.json({conversation,messages:messages.data||[],automated_replies_enabled:await automationEnabled(supabase)})
