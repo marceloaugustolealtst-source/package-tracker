@@ -75,7 +75,7 @@ export async function POST(req:Request){
       if(!conversationId||!sessionId) return NextResponse.json({error:'Missing conversation or session id'},{status:400})
       const conversation=await getOwnedConversation(supabase,conversationId,sessionId)
       if(!conversation) return NextResponse.json({error:'Conversation does not belong to this session'},{status:403})
-      await supabase.from('support_conversations').update({user_last_read_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',conversationId).eq('session_id',sessionId)
+      await supabase.from('support_conversations').update({user_last_read_at:new Date().toISOString()}).eq('id',conversationId).eq('session_id',sessionId)
       const messages=await supabase.from('support_messages').select('id,sender,body,created_at').eq('conversation_id',conversationId).order('created_at',{ascending:true})
       if(messages.error) throw messages.error
       return NextResponse.json({conversation,messages:messages.data||[],automated_replies_enabled:await automationEnabled(supabase)})
