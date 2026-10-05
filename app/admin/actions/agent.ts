@@ -1,6 +1,7 @@
 'use server'
 import {revalidatePath} from 'next/cache'
 import {createClient} from '@/lib/supabase-server'
+import {createAdminClient} from '@/lib/supabase-admin'
 import {redirect} from 'next/navigation'
 
 async function admin(){
@@ -23,9 +24,24 @@ export async function sendAgentMessage(formData:FormData){
   const {supabase}=await admin()
   const conversationId=String(formData.get('conversation_id')||'')
   const body=String(formData.get('body')||'').trim()
-  if(!conversationId||!body)return
+  const file=formData.get('attachment')
+  if(!conversationId||(!body&&!(file instanceof File)))return
+  let messageBody=body
+  if(file instanceof File&&file.size>0){
+    if(!file.type.startsWith('image/'))throw new Error('Only image files can be sent.')
+    if(file.size>8*1024*1024)throw new Error('Image must be 8 MB or smaller.')
+    const adminDb=createAdminClient()
+    if(!adminDb)throw new Error('Attachment storage is unavailable.')
+    const ext=(file.name.split('.').pop()||'jpg').replace(/[^a-z0-9]/gi,'').toLowerCase()||'jpg'
+    const path=conversationId+'/'+crypto.randomUUID()+'.'+ext
+    const bytes=new Uint8Array(await file.arrayBuffer())
+    const upload=await adminDb.storage.from('support-attachments').upload(path,bytes,{contentType:file.type,upsert:false})
+    if(upload.error)throw new Error(`Image upload failed: ${upload.error.message}`)
+    const url=adminDb.storage.from('support-attachments').getPublicUrl(path).data.publicUrl
+    messageBody=messageBody?`${body}\n[[image]]${url}`:`[[image]]${url}`
+  }
   await supabase.from('support_messages').delete().eq('conversation_id',conversationId).eq('sender','bot').ilike('body','Checking your tracking number%')
-  const {error}=await supabase.from('support_messages').insert({conversation_id:conversationId,sender:'agent',body})
+  const {error}=await supabase.from('support_messages').insert({conversation_id:conversationId,sender:'agent',body:messageBody})
   if(error)throw new Error(`Agent message failed: ${error.message}`)
   // Email notification is deliberately best-effort: a notification failure must never undo the chat message.
   try {
