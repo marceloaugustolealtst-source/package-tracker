@@ -5,7 +5,7 @@ import {createClient} from '@supabase/supabase-js'
 export const runtime='nodejs'
 export const dynamic='force-dynamic'
 
-const SESSION_COOKIE='upc_support_session'
+function sessionCookieName(sessionId:string){return 'upc_support_session_'+sessionId.replace(/-/g,'')}
 const MAX_BODY_BYTES=12*1024*1024
 const TRACKING_PATTERN=/^[A-Z0-9][A-Z0-9-]{5,31}$/
 const BOT_REPLIES:Record<string,string>={
@@ -43,8 +43,8 @@ function tokenMatches(token:string,storedHash:string|null|undefined){
   return actual.length===expected.length&&timingSafeEqual(actual,expected)
 }
 
-function setSessionCookie(response:NextResponse,token:string){
-  response.cookies.set(SESSION_COOKIE,token,{httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'lax',path:'/api/support-chat',maxAge:60*60*24*180})
+function setSessionCookie(response:NextResponse,sessionId:string,token:string){
+  response.cookies.set(sessionCookieName(sessionId),token,{httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'lax',path:'/api/support-chat',maxAge:60*60*24*180})
   return response
 }
 
@@ -67,7 +67,7 @@ async function getConversationBySession(supabase:any,sessionId:string){
 }
 
 async function bindOrVerifySession(req:Request,supabase:any,conversation:any){
-  const existingToken=cookieValue(req,SESSION_COOKIE)
+  const existingToken=cookieValue(req,sessionCookieName(sessionId))
   if(conversation.session_token_hash){
     return tokenMatches(existingToken,conversation.session_token_hash)?{ok:true as const,token:null as string|null}:{ok:false as const,token:null as string|null}
   }
@@ -157,7 +157,7 @@ export async function POST(req:Request){
       const messages=await supabase.from('support_messages').select('id,sender,body,created_at').eq('conversation_id',conversation.id).order('created_at',{ascending:true})
       if(messages.error)throw messages.error
       const response=json({conversation:safeConversation(conversation),messages:messages.data||[],automated_replies_enabled:await automationEnabled(supabase)})
-      return binding.token?setSessionCookie(response,binding.token):response
+      return binding.token?setSessionCookie(response,sessionId,binding.token):response
     }
 
     if(action==='session'){
@@ -168,11 +168,11 @@ export async function POST(req:Request){
       const count=await supabase.from('support_messages').select('id',{count:'exact',head:true}).eq('conversation_id',conversation.id).eq('sender','agent').gt('created_at',conversation.user_last_read_at||'1970-01-01T00:00:00.000Z')
       if(count.error)throw count.error
       const response=json({unread_count:Math.min(count.count||0,99)})
-      return binding.token?setSessionCookie(response,binding.token):response
+      return binding.token?setSessionCookie(response,sessionId,binding.token):response
     }
 
     const sessionConversation=await getConversationBySession(supabase,sessionId)
-    if(!sessionConversation||!tokenMatches(cookieValue(req,SESSION_COOKIE),sessionConversation.session_token_hash))return json({error:'Support session could not be verified. Please reopen support chat.'},403)
+    if(!sessionConversation||!tokenMatches(cookieValue(req,sessionCookieName(sessionId)),sessionConversation.session_token_hash))return json({error:'Support session could not be verified. Please reopen support chat.'},403)
 
     if(action==='messages'){
       const conversationId=String(body.conversation_id||'').trim()
