@@ -135,9 +135,17 @@ export async function POST(req:Request){
     const supabase=adminClient()
 
     if(action==='ensure'){
+      const existingConversation=await getConversationBySession(supabase,sessionId)
+      let binding:any
+      if(existingConversation){
+        binding=await bindOrVerifySession(req,supabase,existingConversation)
+        if(!binding.ok)return json({error:'Support session could not be verified. Please start a new support session.'},403)
+      }
       const conversation=await getOrCreateConversation(supabase,sessionId)
-      const binding=await bindOrVerifySession(req,supabase,conversation)
-      if(!binding.ok)return json({error:'Support session could not be verified. Please start a new support session.'},403)
+      if(!existingConversation){
+        binding=await bindOrVerifySession(req,supabase,conversation)
+        if(!binding.ok)return json({error:'Support session could not be verified. Please start a new support session.'},403)
+      }
       const existing=await supabase.from('support_messages').select('id').eq('conversation_id',conversation.id).limit(1)
       if(existing.error)throw existing.error
       if(!existing.data?.length){
