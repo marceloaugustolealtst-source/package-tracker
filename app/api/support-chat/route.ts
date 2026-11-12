@@ -67,7 +67,7 @@ async function getConversationBySession(supabase:any,sessionId:string){
 }
 
 async function bindOrVerifySession(req:Request,supabase:any,conversation:any){
-  const existingToken=cookieValue(req,sessionCookieName(sessionId))
+  const existingToken=cookieValue(req,sessionCookieName(conversation.session_id))
   if(conversation.session_token_hash){
     return tokenMatches(existingToken,conversation.session_token_hash)?{ok:true as const,token:null as string|null}:{ok:false as const,token:null as string|null}
   }
