@@ -48,6 +48,8 @@ function setSessionCookie(response:NextResponse,token:string){
   return response
 }
 
+function safeConversation(conversation:any){if(!conversation)return null;const {session_token_hash,...safe}=conversation;return safe}
+
 function json(data:any,status=200){
   return NextResponse.json(data,{status,headers:{'Cache-Control':'private, no-store, max-age=0','Vary':'Cookie, Origin'}})
 }
@@ -146,7 +148,7 @@ export async function POST(req:Request){
       if(readUpdate.error)throw readUpdate.error
       const messages=await supabase.from('support_messages').select('id,sender,body,created_at').eq('conversation_id',conversation.id).order('created_at',{ascending:true})
       if(messages.error)throw messages.error
-      const response=json({conversation,messages:messages.data||[],automated_replies_enabled:await automationEnabled(supabase)})
+      const response=json({conversation:safeConversation(conversation),messages:messages.data||[],automated_replies_enabled:await automationEnabled(supabase)})
       return binding.token?setSessionCookie(response,binding.token):response
     }
 
@@ -173,7 +175,7 @@ export async function POST(req:Request){
       if(readUpdate.error)throw readUpdate.error
       const messages=await supabase.from('support_messages').select('id,sender,body,created_at').eq('conversation_id',conversationId).order('created_at',{ascending:true})
       if(messages.error)throw messages.error
-      return json({conversation,messages:messages.data||[],automated_replies_enabled:await automationEnabled(supabase)})
+      return json({conversation:safeConversation(conversation),messages:messages.data||[],automated_replies_enabled:await automationEnabled(supabase)})
     }
 
     if(action==='send'||action==='bot'){
@@ -237,7 +239,7 @@ export async function POST(req:Request){
       clean.updated_at=new Date().toISOString()
       const updated=await supabase.from('support_conversations').update(clean).eq('id',conversationId).eq('session_id',sessionId).select('*').single()
       if(updated.error)throw updated.error
-      return json({conversation:updated.data})
+      return json({conversation:safeConversation(updated.data)})
     }
 
     if(action==='lookup'){
