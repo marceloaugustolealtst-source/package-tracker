@@ -1,4 +1,4 @@
-import {createHmac,timingSafeEqual} from 'node:crypto'
+import {createHash,randomBytes,timingSafeEqual} from 'node:crypto'
 import {NextResponse} from 'next/server'
 import {createClient} from '@supabase/supabase-js'
 
@@ -14,44 +14,38 @@ const BOT_REPLIES:Record<string,string>={
   checking_tracking:'Checking your tracking number……'
 }
 
-function getServerSecret(){
-  const secret=process.env.SUPABASE_SECRET_KEY||process.env.SUPABASE_SERVICE_ROLE_KEY
-  if(!secret)throw new Error('Support chat server database key is not configured')
-  return secret
-}
-
 function adminClient(){
   const url=process.env.NEXT_PUBLIC_SUPABASE_URL||process.env.SUPABASE_URL
-  if(!url)throw new Error('Support chat server database URL is not configured')
-  return createClient(url,getServerSecret(),{auth:{autoRefreshToken:false,persistSession:false}})
-}
-
-function signSession(sessionId:string){
-  return createHmac('sha256',getServerSecret()).update(sessionId).digest('base64url')
+  const key=process.env.SUPABASE_SECRET_KEY||process.env.SUPABASE_SERVICE_ROLE_KEY
+  if(!url||!key)throw new Error('Support chat server database configuration is missing')
+  return createClient(url,key,{auth:{autoRefreshToken:false,persistSession:false}})
 }
 
 function validSessionId(value:string){
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
 }
 
+function hashToken(token:string){
+  return createHash('sha256').update(token).digest('hex')
+}
+
 function cookieValue(req:Request,name:string){
   const raw=req.headers.get('cookie')||''
   const item=raw.split(';').map(part=>part.trim()).find(part=>part.startsWith(name+'='))
-  return item?decodeURIComponent(item.slice(name.length+1)):''
+  if(!item)return ''
+  try{return decodeURIComponent(item.slice(name.length+1))}catch{return ''}
 }
 
-function sessionIsValid(req:Request,sessionId:string){
-  if(!validSessionId(sessionId))return false
-  const cookie=cookieValue(req,SESSION_COOKIE)
-  const separator=cookie.lastIndexOf('.')
-  if(separator<1)return false
-  const cookieSession=cookie.slice(0,separator)
-  const signature=cookie.slice(separator+1)
-  if(cookieSession!==sessionId)return false
-  const expected=signSession(sessionId)
-  const actualBuffer=Buffer.from(signature)
-  const expectedBuffer=Buffer.from(expected)
-  return actualBuffer.length===expectedBuffer.length&&timingSafeEqual(actualBuffer,expectedBuffer)
+function tokenMatches(token:string,storedHash:string|null|undefined){
+  if(!token||!storedHash)return false
+  const actual=Buffer.from(hashToken(token),'hex')
+  const expected=Buffer.from(storedHash,'hex')
+  return actual.length===expected.length&&timingSafeEqual(actual,expected)
+}
+
+function setSessionCookie(response:NextResponse,token:string){
+  response.cookies.set(SESSION_COOKIE,token,{httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'lax',path:'/api/support-chat',maxAge:60*60*24*180})
+  return response
 }
 
 function json(data:any,status=200){
@@ -62,6 +56,24 @@ function originIsAllowed(req:Request){
   const origin=req.headers.get('origin')
   if(!origin)return true
   try{return new URL(origin).origin===new URL(req.url).origin}catch{return false}
+}
+
+async function getConversationBySession(supabase:any,sessionId:string){
+  const result=await supabase.from('support_conversations').select('id,session_id,session_token_hash,user_last_read_at,status').eq('session_id',sessionId).maybeSingle()
+  if(result.error)throw result.error
+  return result.data
+}
+
+async function bindOrVerifySession(req:Request,supabase:any,conversation:any){
+  const existingToken=cookieValue(req,SESSION_COOKIE)
+  if(conversation.session_token_hash){
+    return tokenMatches(existingToken,conversation.session_token_hash)?{ok:true as const,token:null as string|null}:{ok:false as const,token:null as string|null}
+  }
+  const token=randomBytes(32).toString('base64url')
+  const updated=await supabase.from('support_conversations').update({session_token_hash:hashToken(token)}).eq('id',conversation.id).is('session_token_hash',null).select('id').maybeSingle()
+  if(updated.error)throw updated.error
+  if(!updated.data)return {ok:false as const,token:null as string|null}
+  return {ok:true as const,token}
 }
 
 async function automationEnabled(supabase:any){
@@ -122,6 +134,8 @@ export async function POST(req:Request){
 
     if(action==='ensure'){
       const conversation=await getOrCreateConversation(supabase,sessionId)
+      const binding=await bindOrVerifySession(req,supabase,conversation)
+      if(!binding.ok)return json({error:'Support session could not be verified. Please start a new support session.'},403)
       const existing=await supabase.from('support_messages').select('id').eq('conversation_id',conversation.id).limit(1)
       if(existing.error)throw existing.error
       if(!existing.data?.length){
@@ -133,11 +147,22 @@ export async function POST(req:Request){
       const messages=await supabase.from('support_messages').select('id,sender,body,created_at').eq('conversation_id',conversation.id).order('created_at',{ascending:true})
       if(messages.error)throw messages.error
       const response=json({conversation,messages:messages.data||[],automated_replies_enabled:await automationEnabled(supabase)})
-      response.cookies.set(SESSION_COOKIE,sessionId+'.'+signSession(sessionId),{httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'lax',path:'/api/support-chat',maxAge:60*60*24*30})
-      return response
+      return binding.token?setSessionCookie(response,binding.token):response
     }
 
-    if(!sessionIsValid(req,sessionId))return json({error:'Support session could not be verified. Please reopen the support chat.'},403)
+    if(action==='session'){
+      const conversation=await getConversationBySession(supabase,sessionId)
+      if(!conversation)return json({unread_count:0})
+      const binding=await bindOrVerifySession(req,supabase,conversation)
+      if(!binding.ok)return json({error:'Support session could not be verified. Please reopen support chat.'},403)
+      const count=await supabase.from('support_messages').select('id',{count:'exact',head:true}).eq('conversation_id',conversation.id).eq('sender','agent').gt('created_at',conversation.user_last_read_at||'1970-01-01T00:00:00.000Z')
+      if(count.error)throw count.error
+      const response=json({unread_count:Math.min(count.count||0,99)})
+      return binding.token?setSessionCookie(response,binding.token):response
+    }
+
+    const sessionConversation=await getConversationBySession(supabase,sessionId)
+    if(!sessionConversation||!tokenMatches(cookieValue(req,SESSION_COOKIE),sessionConversation.session_token_hash))return json({error:'Support session could not be verified. Please reopen support chat.'},403)
 
     if(action==='messages'){
       const conversationId=String(body.conversation_id||'').trim()
