@@ -170,7 +170,7 @@ export async function POST(req:Request){
 
       const sender=action==='bot'?'bot':'customer'
       const messageBody=action==='bot'?BOT_REPLIES[replyCode]:text
-      if(action==='send'&&messageBody.startsWith('[[image]]')&&!/^\\[\\[image\\]\\]data:image\\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(messageBody))return json({error:'Invalid image attachment'},400)
+      if(action==='send'&&messageBody.startsWith('[[image]]')&&!/^\[\[image\]\]data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(messageBody))return json({error:'Invalid image attachment'},400)
       if(action==='send'&&!messageBody.startsWith('[[image]]')&&messageBody.length>4000)return json({error:'Message is too long'},413)
 
       const inserted=await supabase.from('support_messages').insert({conversation_id:conversation.id,sender,body:messageBody}).select('id,conversation_id,sender,body,created_at').single()
